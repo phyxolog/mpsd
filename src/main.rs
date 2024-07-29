@@ -2,14 +2,13 @@ use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use detector::{Detector, StreamType};
 use lazy_static::lazy_static;
+use memmap2::Mmap;
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Instant;
-
-use memmap2::Mmap;
 
 mod detector;
 
