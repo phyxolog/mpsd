@@ -5,6 +5,7 @@ pub enum StreamType {
     RiffWave,
     Bitmap,
     Ogg,
+    Aac,
 }
 
 pub trait Detector {
@@ -14,6 +15,7 @@ pub trait Detector {
 pub struct RiffWaveDetector;
 pub struct BitmapDetector;
 pub struct OggDetector;
+pub struct AacDetector;
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -172,7 +174,6 @@ impl Detector for OggDetector {
                 break;
             }
 
-            let mut ogg_page_len: usize = 0;
             let end = offset2 + header.num_page_segments as usize;
 
             if end > buffer.len() {
@@ -180,11 +181,10 @@ impl Detector for OggDetector {
             }
 
             for &byte in &buffer[offset2..end] {
-                ogg_page_len += byte as usize;
+                size += byte as usize;
             }
 
-            size +=
-                ogg_page_len + std::mem::size_of::<OggHeader>() + header.num_page_segments as usize;
+            size += std::mem::size_of::<OggHeader>() + header.num_page_segments as usize;
 
             if (header.bit_flags & 4) == 4 {
                 break;
@@ -203,5 +203,15 @@ impl Detector for OggDetector {
         }
 
         return Some((offset, size));
+    }
+}
+
+impl Detector for AacDetector {
+    fn detect(&self, buffer: &[u8], offset: usize) -> Option<(usize, usize)> {
+        // if (buffer[offset + 1] & 240) == 240 {
+        //     return Some((offset, 12));
+        // }
+
+        None
     }
 }

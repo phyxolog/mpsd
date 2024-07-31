@@ -16,6 +16,7 @@ mod detector;
 
 static TOTAL_STREAM_COUNT: AtomicUsize = AtomicUsize::new(0);
 static TOTAL_STREAM_SIZE: AtomicUsize = AtomicUsize::new(0);
+static SKIP_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
 struct Summary {
     process_time: Duration,
@@ -24,12 +25,19 @@ struct Summary {
     total_stream_size: usize,
 }
 
+struct Args<'a> {
+    file_path: Option<&'a String>,
+    output_dir: Option<&'a String>,
+    patterns: &'a HashMap<Bytes, StreamType>,
+}
+
 lazy_static! {
     static ref PATTERNS: HashMap<Bytes, StreamType> = {
         HashMap::from([
             (Bytes::from("OggS"), StreamType::Ogg),
             (Bytes::from("BM"), StreamType::Bitmap),
             (Bytes::from("RIFF"), StreamType::RiffWave),
+            (Bytes::from(&b"\xFF"[..]), StreamType::Aac),
         ])
     };
 }
@@ -39,12 +47,18 @@ fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType) {
         StreamType::Ogg => Box::new(detector::OggDetector),
         StreamType::Bitmap => Box::new(detector::BitmapDetector),
         StreamType::RiffWave => Box::new(detector::RiffWaveDetector),
+        StreamType::Aac => Box::new(detector::AacDetector),
     };
+
+    if offset <= SKIP_OFFSET.load(Ordering::SeqCst) {
+        return;
+    }
 
     match detector.detect(buffer, offset) {
         Some((offset, size)) => {
             TOTAL_STREAM_COUNT.fetch_add(1, Ordering::Relaxed);
             TOTAL_STREAM_SIZE.fetch_add(size, Ordering::Relaxed);
+            SKIP_OFFSET.store(offset + size, Ordering::SeqCst);
 
             println!(
                 "--> Found {:?} stream @ {:#016X} ({} bytes)",
@@ -55,43 +69,45 @@ fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType) {
     }
 }
 
-fn run(path: &str) -> Summary {
-    let file = File::open(path).expect("failed to open the file");
+fn run(args: &Args) -> Summary {
+    let file_path = args.file_path.expect("file path is empty");
+    let file = File::open(file_path).expect("failed to open the file");
 
     let mmap = Arc::new(unsafe { Mmap::map(&file).expect("failed to map the file") });
 
     let start_time = Instant::now();
 
-    let (sx, rx) = mpsc::channel();
-    let patterns: Vec<&Bytes> = PATTERNS.keys().collect();
+    let (ssx, drx) = mpsc::channel();
+    let patterns: Vec<Bytes> = args.patterns.keys().cloned().collect();
 
     let ac = AhoCorasick::new(&patterns).unwrap();
 
-    let sx_cloned = sx.clone();
+    let ssx_cloned = ssx.clone();
     let mmap_cloned = Arc::clone(&mmap);
 
-    let sender = thread::spawn(move || {
+    let scanner = thread::spawn(move || {
         for c in ac.find_iter(&*mmap_cloned) {
-            let pattern = patterns[c.pattern()];
+            let pattern = &patterns[c.pattern()];
+            let pattern_bytes = Bytes::from(pattern.to_vec());
 
-            sx_cloned
-                .send((c.start(), PATTERNS.get(pattern).unwrap()))
-                .unwrap();
+            if let Some(media_type) = PATTERNS.get(&pattern_bytes) {
+                ssx_cloned.send((c.start(), media_type)).unwrap();
+            }
         }
     });
 
-    drop(sx);
+    drop(ssx);
 
     let mmap_cloned = Arc::clone(&mmap);
 
-    let receiver = thread::spawn(move || {
-        for (offset, media_type) in rx {
+    let detector = thread::spawn(move || {
+        for (offset, media_type) in drx {
             handle_offset(&mmap_cloned, offset, media_type);
         }
     });
 
-    sender.join().unwrap();
-    receiver.join().unwrap();
+    scanner.join().unwrap();
+    detector.join().unwrap();
 
     Summary {
         process_time: start_time.elapsed(),
@@ -127,17 +143,39 @@ fn print_summary(summary: &Summary) {
 }
 
 fn main() {
-    let args: cli::Cli = cli::parse();
+    let cli_args: cli::Cli = cli::parse();
 
-    match args.command {
+    let mut patterns: HashMap<Bytes, StreamType> = PATTERNS.clone();
+
+    patterns.retain(|_, v| match v {
+        StreamType::Bitmap => cli_args.detect_bmp != 0,
+        StreamType::Ogg => cli_args.detect_ogg != 0,
+        StreamType::RiffWave => cli_args.detect_wav != 0,
+        StreamType::Aac => true,
+    });
+
+    let mut args = Args {
+        patterns: &patterns,
+        output_dir: None,
+        file_path: None,
+    };
+
+    match cli_args.command {
         cli::Commands::Scan { file_path } => {
             println!("-> Scanning...");
-
-            let summary: Summary = run(&file_path);
+            args.file_path = Some(&file_path);
+            let summary: Summary = run(&args);
             print_summary(&summary);
         }
-        cli::Commands::Extract { file_path, out_dir } => {
-            println!("Pushing {file_path} {out_dir}");
+        cli::Commands::Extract {
+            file_path,
+            output_dir,
+        } => {
+            println!("-> Scanning and extracting...");
+            args.file_path = Some(&file_path);
+            args.output_dir = Some(&output_dir);
+            let summary: Summary = run(&args);
+            print_summary(&summary);
         }
     }
 }

@@ -36,7 +36,7 @@ pub enum Commands {
         file_path: String,
 
         /// Path for the output folder (for extracted files)
-        out_dir: String,
+        output_dir: String,
     },
 }
 
