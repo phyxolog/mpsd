@@ -2,7 +2,6 @@ use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
 use detector::{Detector, StreamType};
-use lazy_static::lazy_static;
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs::File;
@@ -32,19 +31,8 @@ struct Args<'a> {
     patterns: &'a HashMap<Bytes, StreamType>,
 }
 
-lazy_static! {
-    static ref PATTERNS: HashMap<Bytes, StreamType> = {
-        HashMap::from([
-            (Bytes::from("OggS"), StreamType::Ogg),
-            (Bytes::from("BM"), StreamType::Bitmap),
-            (Bytes::from("RIFF"), StreamType::RiffWave),
-            (Bytes::from(&b"\xFF"[..]), StreamType::Aac),
-        ])
-    };
-}
-
-fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType, state: &mut State) {
-    let detector: Box<dyn Detector> = match media_type {
+fn handle_offset(buffer: &Mmap, offset: usize, stream_type: &StreamType, state: &mut State) {
+    let detector: Box<dyn Detector> = match stream_type {
         StreamType::Ogg => Box::new(detector::OggDetector),
         StreamType::Bitmap => Box::new(detector::BitmapDetector),
         StreamType::RiffWave => Box::new(detector::RiffWaveDetector),
@@ -63,7 +51,7 @@ fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType, state: &
 
             println!(
                 "--> Found {:?} stream @ {:#016X} ({} bytes)",
-                media_type, offset, size
+                stream_type, offset, size
             )
         }
         _ => {}
@@ -85,14 +73,14 @@ fn run(args: &Args) -> Summary {
 
     let ssx_cloned = ssx.clone();
     let mmap_cloned = Arc::clone(&mmap);
+    let patterns_cloned = args.patterns.clone();
 
     let scanner = thread::spawn(move || {
         for c in ac.find_iter(&*mmap_cloned) {
             let pattern = &patterns[c.pattern()];
-            let pattern_bytes = Bytes::from(pattern.to_vec());
 
-            if let Some(media_type) = PATTERNS.get(&pattern_bytes) {
-                ssx_cloned.send((c.start(), media_type)).unwrap();
+            if let Some(stream_type) = patterns_cloned.get(pattern) {
+                ssx_cloned.send((c.start(), stream_type.clone())).unwrap();
             }
         }
     });
@@ -112,8 +100,8 @@ fn run(args: &Args) -> Summary {
     let detector = thread::spawn(move || {
         let mut state = state_cloned.lock().unwrap();
 
-        for (offset, media_type) in drx {
-            handle_offset(&mmap_cloned, offset, media_type, &mut state);
+        for (offset, stream_type) in drx {
+            handle_offset(&mmap_cloned, offset, &stream_type, &mut state);
         }
     });
 
@@ -158,7 +146,12 @@ fn print_summary(summary: &Summary) {
 fn main() {
     let cli_args: cli::Cli = cli::parse();
 
-    let mut patterns: HashMap<Bytes, StreamType> = PATTERNS.clone();
+    let mut patterns: HashMap<Bytes, StreamType> = HashMap::from([
+        (Bytes::from("OggS"), StreamType::Ogg),
+        (Bytes::from("BM"), StreamType::Bitmap),
+        (Bytes::from("RIFF"), StreamType::RiffWave),
+        (Bytes::from(&b"\xFF"[..]), StreamType::Aac),
+    ]);
 
     patterns.retain(|_, v| match v {
         StreamType::Bitmap => cli_args.detect_bmp != 0,
