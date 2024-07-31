@@ -28,33 +28,36 @@ struct Summary {
 struct Args<'a> {
     file_path: Option<&'a String>,
     output_dir: Option<&'a String>,
-    patterns: &'a HashMap<Bytes, StreamType>,
+    patterns: &'a HashMap<Bytes, Vec<StreamType>>,
 }
 
-fn handle_offset(buffer: &Mmap, offset: usize, stream_type: &StreamType, state: &mut State) {
-    let detector: Box<dyn Detector> = match stream_type {
-        StreamType::Ogg => Box::new(detector::OggDetector),
-        StreamType::Bitmap => Box::new(detector::BitmapDetector),
-        StreamType::RiffWave => Box::new(detector::RiffWaveDetector),
-        StreamType::Aac => Box::new(detector::AacDetector),
-    };
-
+fn handle_offset(buffer: &Mmap, offset: usize, stream_types: &Vec<StreamType>, state: &mut State) {
     if offset <= state.skip_offset {
         return;
     }
 
-    match detector.detect(buffer, offset) {
-        Some((offset, size)) => {
-            (*state).total_stream_size += size;
-            (*state).total_stream_count += 1;
-            (*state).skip_offset = offset + size;
+    for x in stream_types {
+        let detector: Box<dyn Detector> = match x {
+            StreamType::Ogg => Box::new(detector::OggDetector),
+            StreamType::Bitmap => Box::new(detector::BitmapDetector),
+            StreamType::RiffWave => Box::new(detector::RiffWaveDetector),
+            StreamType::Aac => Box::new(detector::AacDetector),
+            StreamType::Mp3 => Box::new(detector::Mp3Detector),
+        };
 
-            println!(
-                "--> Found {:?} stream @ {:#016X} ({} bytes)",
-                stream_type, offset, size
-            )
+        match detector.detect(buffer, offset) {
+            Some((offset, size)) => {
+                (*state).total_stream_size += size;
+                (*state).total_stream_count += 1;
+                (*state).skip_offset = offset + size;
+
+                println!(
+                    "--> Found {:?} stream @ {:#016X} ({} bytes)",
+                    x, offset, size
+                )
+            }
+            _ => {}
         }
-        _ => {}
     }
 }
 
@@ -79,8 +82,8 @@ fn run(args: &Args) -> Summary {
         for c in ac.find_iter(&*mmap_cloned) {
             let pattern = &patterns[c.pattern()];
 
-            if let Some(stream_type) = patterns_cloned.get(pattern) {
-                ssx_cloned.send((c.start(), stream_type.clone())).unwrap();
+            if let Some(stream_types) = patterns_cloned.get(pattern) {
+                ssx_cloned.send((c.start(), stream_types.clone())).unwrap();
             }
         }
     });
@@ -100,8 +103,8 @@ fn run(args: &Args) -> Summary {
     let detector = thread::spawn(move || {
         let mut state = state_cloned.lock().unwrap();
 
-        for (offset, stream_type) in drx {
-            handle_offset(&mmap_cloned, offset, &stream_type, &mut state);
+        for (offset, stream_types) in drx {
+            handle_offset(&mmap_cloned, offset, &stream_types, &mut state);
         }
     });
 
@@ -146,18 +149,38 @@ fn print_summary(summary: &Summary) {
 fn main() {
     let cli_args: cli::Cli = cli::parse();
 
-    let mut patterns: HashMap<Bytes, StreamType> = HashMap::from([
-        (Bytes::from("OggS"), StreamType::Ogg),
-        (Bytes::from("BM"), StreamType::Bitmap),
-        (Bytes::from("RIFF"), StreamType::RiffWave),
-        (Bytes::from(&b"\xFF"[..]), StreamType::Aac),
+    let mut patterns: HashMap<Bytes, Vec<StreamType>> = HashMap::from([
+        (Bytes::from("OggS"), vec![StreamType::Ogg]),
+        (Bytes::from("BM"), vec![StreamType::Bitmap]),
+        (Bytes::from("RIFF"), vec![StreamType::RiffWave]),
+        (
+            Bytes::from(&b"\xFF"[..]),
+            vec![StreamType::Aac, StreamType::Mp3],
+        ),
     ]);
 
-    patterns.retain(|_, v| match v {
-        StreamType::Bitmap => cli_args.detect_bmp != 0,
-        StreamType::Ogg => cli_args.detect_ogg != 0,
-        StreamType::RiffWave => cli_args.detect_wav != 0,
-        StreamType::Aac => true,
+    patterns.retain(|_, v| match v.as_slice() {
+        [StreamType::Bitmap] => cli_args.detect_bmp != 0,
+        [StreamType::Ogg] => cli_args.detect_ogg != 0,
+        [StreamType::RiffWave] => cli_args.detect_wav != 0,
+        [StreamType::Aac, StreamType::Mp3] => {
+            if cli_args.detect_aac != 0 && cli_args.detect_mp3 != 0 {
+                return true;
+            }
+
+            if cli_args.detect_aac != 0 {
+                *v = vec![StreamType::Aac];
+                return true;
+            }
+
+            if cli_args.detect_mp3 != 0 {
+                *v = vec![StreamType::Mp3];
+                return true;
+            }
+
+            return false;
+        }
+        _ => false,
     });
 
     let mut args = Args {

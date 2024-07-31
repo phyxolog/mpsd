@@ -1,11 +1,12 @@
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamType {
     RiffWave,
     Bitmap,
     Ogg,
     Aac,
+    Mp3,
 }
 
 pub trait Detector {
@@ -16,6 +17,7 @@ pub struct RiffWaveDetector;
 pub struct BitmapDetector;
 pub struct OggDetector;
 pub struct AacDetector;
+pub struct Mp3Detector;
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -209,7 +211,17 @@ impl Detector for OggDetector {
 }
 
 impl Detector for AacDetector {
-    fn detect(&self, buffer: &[u8], offset: usize) -> Option<(usize, usize)> {
+    fn detect(&self, _buffer: &[u8], _offset: usize) -> Option<(usize, usize)> {
+        // if (buffer[offset + 1] & 240) == 240 {
+        //     return Some((offset, 12));
+        // }
+
+        None
+    }
+}
+
+impl Detector for Mp3Detector {
+    fn detect(&self, _buffer: &[u8], _offset: usize) -> Option<(usize, usize)> {
         // if (buffer[offset + 1] & 240) == 240 {
         //     return Some((offset, 12));
         // }
