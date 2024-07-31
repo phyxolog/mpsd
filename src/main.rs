@@ -13,7 +13,6 @@ use std::time::{Duration, Instant};
 mod cli;
 mod detector;
 
-#[derive(Clone)]
 struct State {
     total_stream_count: usize,
     total_stream_size: usize,
