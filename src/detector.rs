@@ -173,15 +173,14 @@ impl Detector for OggDetector {
             }
 
             let mut ogg_page_len: usize = 0;
+            let end = offset2 + header.num_page_segments as usize;
 
-            for _i in 0..header.num_page_segments {
-                if offset2 > buffer.len() {
-                    break;
-                }
+            if end > buffer.len() {
+                break;
+            }
 
-                let tbyte: u8 = buffer[offset2];
-                ogg_page_len += tbyte as usize;
-                offset2 += 1;
+            for &byte in &buffer[offset2..end] {
+                ogg_page_len += byte as usize;
             }
 
             size +=
