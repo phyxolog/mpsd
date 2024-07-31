@@ -6,17 +6,19 @@ use lazy_static::lazy_static;
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 mod cli;
 mod detector;
 
-static TOTAL_STREAM_COUNT: AtomicUsize = AtomicUsize::new(0);
-static TOTAL_STREAM_SIZE: AtomicUsize = AtomicUsize::new(0);
-static SKIP_OFFSET: AtomicUsize = AtomicUsize::new(0);
+#[derive(Clone)]
+struct State {
+    total_stream_count: usize,
+    total_stream_size: usize,
+    skip_offset: usize,
+}
 
 struct Summary {
     process_time: Duration,
@@ -42,7 +44,7 @@ lazy_static! {
     };
 }
 
-fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType) {
+fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType, state: &mut State) {
     let detector: Box<dyn Detector> = match media_type {
         StreamType::Ogg => Box::new(detector::OggDetector),
         StreamType::Bitmap => Box::new(detector::BitmapDetector),
@@ -50,15 +52,15 @@ fn handle_offset(buffer: &Mmap, offset: usize, media_type: &StreamType) {
         StreamType::Aac => Box::new(detector::AacDetector),
     };
 
-    if offset <= SKIP_OFFSET.load(Ordering::SeqCst) {
+    if offset <= state.skip_offset {
         return;
     }
 
     match detector.detect(buffer, offset) {
         Some((offset, size)) => {
-            TOTAL_STREAM_COUNT.fetch_add(1, Ordering::Relaxed);
-            TOTAL_STREAM_SIZE.fetch_add(size, Ordering::Relaxed);
-            SKIP_OFFSET.store(offset + size, Ordering::SeqCst);
+            (*state).total_stream_size += size;
+            (*state).total_stream_count += 1;
+            (*state).skip_offset = offset + size;
 
             println!(
                 "--> Found {:?} stream @ {:#016X} ({} bytes)",
@@ -100,20 +102,32 @@ fn run(args: &Args) -> Summary {
 
     let mmap_cloned = Arc::clone(&mmap);
 
+    let state = Arc::new(Mutex::new(State {
+        total_stream_size: 0,
+        total_stream_count: 0,
+        skip_offset: 0,
+    }));
+
+    let state_cloned = Arc::clone(&state);
+
     let detector = thread::spawn(move || {
+        let mut state = state_cloned.lock().unwrap();
+
         for (offset, media_type) in drx {
-            handle_offset(&mmap_cloned, offset, media_type);
+            handle_offset(&mmap_cloned, offset, media_type, &mut state);
         }
     });
 
     scanner.join().unwrap();
     detector.join().unwrap();
 
+    let state = state.lock().unwrap();
+
     Summary {
         process_time: start_time.elapsed(),
         processed_bytes: mmap.len(),
-        total_stream_size: TOTAL_STREAM_SIZE.load(Ordering::Relaxed),
-        total_stream_count: TOTAL_STREAM_COUNT.load(Ordering::Relaxed),
+        total_stream_size: (*state).total_stream_size,
+        total_stream_count: (*state).total_stream_count,
     }
 }
 

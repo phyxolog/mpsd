@@ -94,8 +94,10 @@ impl Detector for RiffWaveDetector {
             return None;
         }
 
-        // let real_size = 4 + (8 + header.subchunk1_size) + (8 + header.subchunk2_size);
-        let size: usize = usize::try_from(header.chunk_size + 8).unwrap();
+        let sc1: usize = usize::try_from(header.subchunk1_size).unwrap();
+        let sc2: usize = usize::try_from(header.subchunk2_size).unwrap();
+        let size: usize = 4 + 8 + sc1 + 8 + sc2;
+        // let size: usize = usize::try_from(header.chunk_size + 8).unwrap();
 
         if offset + size > buffer.len() {
             return None;
