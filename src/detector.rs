@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum StreamType {
     RiffWave,
     Bitmap,

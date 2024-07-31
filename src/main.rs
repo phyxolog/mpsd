@@ -4,34 +4,45 @@ use colored::Colorize;
 use detector::{Detector, StreamType};
 use memmap2::Mmap;
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 mod cli;
 mod detector;
+mod extractor;
 
 struct State {
+    is_extract: bool,
+    skip_offset: usize,
     total_stream_count: usize,
     total_stream_size: usize,
-    skip_offset: usize,
 }
 
 struct Summary {
     process_time: Duration,
     processed_bytes: usize,
-    total_stream_count: usize,
     total_stream_size: usize,
+    total_stream_count: usize,
 }
 
-struct Args<'a> {
-    file_path: Option<&'a String>,
-    output_dir: Option<&'a String>,
-    patterns: &'a HashMap<Bytes, Vec<StreamType>>,
+struct Args {
+    is_extract: bool,
+    file_path: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
+    patterns: HashMap<Bytes, Vec<StreamType>>,
 }
 
-fn handle_offset(buffer: &Mmap, offset: usize, stream_types: &Vec<StreamType>, state: &mut State) {
+fn handle_offset(
+    buffer: &Mmap,
+    offset: usize,
+    stream_types: &Vec<StreamType>,
+    extractor: &mpsc::Sender<(usize, usize, StreamType)>,
+    state: &mut State,
+) {
     if offset <= state.skip_offset {
         return;
     }
@@ -45,27 +56,42 @@ fn handle_offset(buffer: &Mmap, offset: usize, stream_types: &Vec<StreamType>, s
             StreamType::Mp3 => Box::new(detector::Mp3Detector),
         };
 
-        match detector.detect(buffer, offset) {
-            Some((offset, size)) => {
-                (*state).total_stream_size += size;
-                (*state).total_stream_count += 1;
-                (*state).skip_offset = offset + size;
+        if let Some((offset, size)) = detector.detect(buffer, offset) {
+            (*state).total_stream_size += size;
+            (*state).total_stream_count += 1;
+            (*state).skip_offset = offset + size;
 
-                println!(
-                    "--> Found {:?} stream @ {:#016X} ({} bytes)",
-                    x, offset, size
-                )
+            if state.is_extract {
+                extractor
+                    .send((offset, size, *x))
+                    .expect("could not synchronize threads");
             }
-            _ => {}
+
+            println!(
+                "--> Found {:?} stream @ {:#016X} ({} bytes)",
+                x, offset, size
+            )
         }
     }
 }
 
-fn run(args: &Args) -> Summary {
+fn run(args: Args) -> Summary {
     let file_path = args.file_path.expect("file path is empty");
     let file = File::open(file_path).expect("failed to open the file");
 
     let mmap = Arc::new(unsafe { Mmap::map(&file).expect("failed to map the file") });
+
+    let mut output_dir: PathBuf = PathBuf::new();
+
+    if args.is_extract {
+        output_dir = args.output_dir.expect("output directory is empty");
+    }
+
+    let output_dir_cloned = output_dir.clone();
+
+    if args.is_extract {
+        fs::create_dir_all(output_dir).expect("could not create directory for extracting files");
+    }
 
     let start_time = Instant::now();
 
@@ -83,7 +109,9 @@ fn run(args: &Args) -> Summary {
             let pattern = &patterns[c.pattern()];
 
             if let Some(stream_types) = patterns_cloned.get(pattern) {
-                ssx_cloned.send((c.start(), stream_types.clone())).unwrap();
+                ssx_cloned
+                    .send((c.start(), stream_types.clone()))
+                    .expect("could not synchronize threads");
             }
         }
     });
@@ -93,23 +121,37 @@ fn run(args: &Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let state = Arc::new(Mutex::new(State {
+        skip_offset: 0,
         total_stream_size: 0,
         total_stream_count: 0,
-        skip_offset: 0,
+        is_extract: args.is_extract,
     }));
 
     let state_cloned = Arc::clone(&state);
+    let (esx, erx) = mpsc::channel();
+    let esx_cloned = esx.clone();
 
     let detector = thread::spawn(move || {
         let mut state = state_cloned.lock().unwrap();
 
         for (offset, stream_types) in drx {
-            handle_offset(&mmap_cloned, offset, &stream_types, &mut state);
+            handle_offset(&mmap_cloned, offset, &stream_types, &esx_cloned, &mut state);
         }
     });
 
-    scanner.join().unwrap();
-    detector.join().unwrap();
+    drop(esx);
+
+    let mmap_cloned = Arc::clone(&mmap);
+
+    let extractor = thread::spawn(move || {
+        for (offset, size, stream_type) in erx {
+            extractor::extract(&mmap_cloned, offset, size, &stream_type, &output_dir_cloned);
+        }
+    });
+
+    scanner.join().expect("scanner thread panicked");
+    detector.join().expect("detector thread panicked");
+    extractor.join().expect("extractor thread panicked");
 
     let state = state.lock().unwrap();
 
@@ -160,8 +202,8 @@ fn main() {
     ]);
 
     patterns.retain(|_, v| match v.as_slice() {
-        [StreamType::Bitmap] => cli_args.detect_bmp != 0,
         [StreamType::Ogg] => cli_args.detect_ogg != 0,
+        [StreamType::Bitmap] => cli_args.detect_bmp != 0,
         [StreamType::RiffWave] => cli_args.detect_wav != 0,
         [StreamType::Aac, StreamType::Mp3] => {
             if cli_args.detect_aac != 0 && cli_args.detect_mp3 != 0 {
@@ -184,16 +226,17 @@ fn main() {
     });
 
     let mut args = Args {
-        patterns: &patterns,
+        patterns,
         output_dir: None,
         file_path: None,
+        is_extract: false,
     };
 
     match cli_args.command {
         cli::Commands::Scan { file_path } => {
             println!("-> Scanning...");
-            args.file_path = Some(&file_path);
-            let summary: Summary = run(&args);
+            args.file_path = Some(PathBuf::from(file_path));
+            let summary: Summary = run(args);
             print_summary(&summary);
         }
         cli::Commands::Extract {
@@ -201,9 +244,10 @@ fn main() {
             output_dir,
         } => {
             println!("-> Scanning and extracting...");
-            args.file_path = Some(&file_path);
-            args.output_dir = Some(&output_dir);
-            let summary: Summary = run(&args);
+            args.is_extract = true;
+            args.file_path = Some(PathBuf::from(file_path));
+            args.output_dir = Some(PathBuf::from(output_dir));
+            let summary: Summary = run(args);
             print_summary(&summary);
         }
     }
