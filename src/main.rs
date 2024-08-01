@@ -216,9 +216,9 @@ fn print_summary(summary: &Summary) {
     println!("\n{}", "Summary:\n".bold().underline());
     println!("-> Process time: {:?}", summary.process_time);
     println!("-> Speed: {:.2} MB/s", speed_mbps);
-    println!("-> Found media streams: {}", summary.total_stream_count);
+    println!("-> Found streams: {}", summary.total_stream_count);
     println!(
-        "-> Size of found media streams: {} ({} bytes)",
+        "-> Size of found streams: {} ({} bytes)",
         humanize_size(summary.total_stream_size),
         summary.total_stream_size
     );

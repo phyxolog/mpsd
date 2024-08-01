@@ -1,7 +1,7 @@
 use clap::value_parser;
 use clap::{Parser, Subcommand};
 
-/// Multimedia streams detector
+/// Multi-Pattern Streams Detector
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 pub struct Cli {
@@ -37,7 +37,7 @@ pub enum Commands {
         /// Path for the input file
         file_path: String,
     },
-    /// Extract media streams from input file
+    /// Extract streams from input file
     #[command(arg_required_else_help = true)]
     Extract {
         /// Path for the input file
