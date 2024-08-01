@@ -44,11 +44,11 @@ fn handle_offset(
     extractor: &mpsc::Sender<(usize, usize, StreamType)>,
     state: &mut State,
 ) {
-    if offset <= state.skip_offset {
-        return;
-    }
-
     for x in stream_types {
+        if offset <= state.skip_offset {
+            return;
+        }
+
         let detector: Box<dyn Detector> = match x {
             StreamType::Ogg => Box::new(detector::OggDetector),
             StreamType::Bitmap => Box::new(detector::BitmapDetector),
@@ -95,7 +95,6 @@ fn run(args: Args) -> Summary {
     }
 
     let start_time = Instant::now();
-
     let (ssx, drx) = mpsc::channel();
 
     let (onebyte_patterns, patterns): (Vec<Bytes>, Vec<Bytes>) = args
@@ -112,13 +111,15 @@ fn run(args: Args) -> Summary {
     let patterns_cloned = args.patterns.clone();
 
     let scanner = thread::spawn(move || {
-        for c in ac.find_iter(&*mmap_cloned) {
-            let pattern = &patterns[c.pattern()];
+        if patterns.len() > 0 {
+            for c in ac.find_iter(&*mmap_cloned) {
+                let pattern = &patterns[c.pattern()];
 
-            if let Some(stream_types) = patterns_cloned.get(pattern) {
-                ssx_cloned
-                    .send((c.start(), stream_types.clone()))
-                    .expect("could not synchronize threads");
+                if let Some(stream_types) = patterns_cloned.get(pattern) {
+                    ssx_cloned
+                        .send((c.start(), stream_types.clone()))
+                        .expect("could not synchronize threads");
+                }
             }
         }
     });
@@ -128,14 +129,14 @@ fn run(args: Args) -> Summary {
 
     let onebyte_ssx_cloned = ssx.clone();
     let onebyte_mmap_cloned = Arc::clone(&mmap);
-    let onebyte_patterns_cloned = args.patterns.clone();
+    let patterns_cloned = args.patterns.clone();
 
     let onebyte_scanner = thread::spawn(move || {
         if onebyte_patterns.len() > 0 {
             for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
                 let pattern = &onebyte_patterns[c.pattern()];
 
-                if let Some(stream_types) = onebyte_patterns_cloned.get(pattern) {
+                if let Some(stream_types) = patterns_cloned.get(pattern) {
                     onebyte_ssx_cloned
                         .send((c.start(), stream_types.clone()))
                         .expect("could not synchronize threads");
