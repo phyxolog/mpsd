@@ -1,28 +1,28 @@
+use clap::value_parser;
 use clap::{Parser, Subcommand};
-use std::ops::RangeInclusive;
 
 /// Multimedia streams detector
 #[derive(Debug, Parser)]
 #[command(long_about = None)]
 pub struct Cli {
-    /// Enable WAV (RIFF WAVE) detection
-    #[arg(long = "wav", global = true, value_parser = validate_bool, default_value_t = 1)]
+    /// Enable WAV (RIFF WAVE PCM) detection
+    #[arg(long = "wav", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_wav: u8,
 
     /// Enable OGG detection
-    #[arg(long = "ogg", global = true, value_parser = validate_bool, default_value_t = 1)]
+    #[arg(long = "ogg", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_ogg: u8,
 
     /// Enable BMP (Windows BitMaP) detection
-    #[arg(long = "bmp", global = true, value_parser = validate_bool, default_value_t = 1)]
+    #[arg(long = "bmp", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_bmp: u8,
 
     /// Enable AAC (ADTS) detection
-    #[arg(long = "aac", global = true, value_parser = validate_bool, default_value_t = 1)]
+    #[arg(long = "aac", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_aac: u8,
 
     /// Enable MP3 (MPEG-1/2 Audio) detection
-    #[arg(long = "mp3", global = true, value_parser = validate_bool, default_value_t = 1)]
+    #[arg(long = "mp3", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_mp3: u8,
 
     #[command(subcommand)]
@@ -51,15 +51,4 @@ pub enum Commands {
 pub fn parse() -> Cli {
     let args = Cli::parse();
     return args;
-}
-
-fn validate_bool(s: &str) -> Result<u8, String> {
-    let value: usize = s.parse().map_err(|_| format!("`{s}` isn't a number"))?;
-    let range: RangeInclusive<usize> = 0..=1;
-
-    if range.contains(&value) {
-        Ok(value as u8)
-    } else {
-        Err(format!("should be 0 or 1"))
-    }
 }

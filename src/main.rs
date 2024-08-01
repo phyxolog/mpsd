@@ -1,7 +1,6 @@
 use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
-use detector::{Detector, StreamType};
 use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs;
@@ -11,6 +10,10 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use detector::{
+    AacDetector, BitmapDetector, Detector, Mp3Detector, OggDetector, RiffWaveDetector, StreamType,
+};
 
 mod cli;
 mod detector;
@@ -50,11 +53,11 @@ fn handle_offset(
         }
 
         let detector: Box<dyn Detector> = match x {
-            StreamType::Ogg => Box::new(detector::OggDetector),
-            StreamType::Bitmap => Box::new(detector::BitmapDetector),
-            StreamType::RiffWave => Box::new(detector::RiffWaveDetector),
-            StreamType::Aac => Box::new(detector::AacDetector),
-            StreamType::Mp3 => Box::new(detector::Mp3Detector),
+            StreamType::Ogg => Box::new(OggDetector),
+            StreamType::Bitmap => Box::new(BitmapDetector),
+            StreamType::RiffWave => Box::new(RiffWaveDetector),
+            StreamType::Aac => Box::new(AacDetector),
+            StreamType::Mp3 => Box::new(Mp3Detector),
         };
 
         if let Some((offset, size)) = detector.detect(buffer, offset) {
@@ -111,7 +114,7 @@ fn run(args: Args) -> Summary {
     let patterns_cloned = args.patterns.clone();
 
     let scanner = thread::spawn(move || {
-        if patterns.len() > 0 {
+        if ac.patterns_len() > 0 {
             for c in ac.find_iter(&*mmap_cloned) {
                 let pattern = &patterns[c.pattern()];
 
@@ -132,7 +135,7 @@ fn run(args: Args) -> Summary {
     let patterns_cloned = args.patterns.clone();
 
     let onebyte_scanner = thread::spawn(move || {
-        if onebyte_patterns.len() > 0 {
+        if onebyte_ac.patterns_len() > 0 {
             for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
                 let pattern = &onebyte_patterns[c.pattern()];
 
