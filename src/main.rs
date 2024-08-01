@@ -58,8 +58,8 @@ fn handle_offset(
         };
 
         if let Some((offset, size)) = detector.detect(buffer, offset) {
-            (*state).total_stream_size += size;
             (*state).total_stream_count += 1;
+            (*state).total_stream_size += size;
             (*state).skip_offset = offset + size;
 
             if state.is_extract {
@@ -131,13 +131,15 @@ fn run(args: Args) -> Summary {
     let onebyte_patterns_cloned = args.patterns.clone();
 
     let onebyte_scanner = thread::spawn(move || {
-        for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
-            let pattern = &onebyte_patterns[c.pattern()];
+        if onebyte_patterns.len() > 0 {
+            for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
+                let pattern = &onebyte_patterns[c.pattern()];
 
-            if let Some(stream_types) = onebyte_patterns_cloned.get(pattern) {
-                onebyte_ssx_cloned
-                    .send((c.start(), stream_types.clone()))
-                    .expect("could not synchronize threads");
+                if let Some(stream_types) = onebyte_patterns_cloned.get(pattern) {
+                    onebyte_ssx_cloned
+                        .send((c.start(), stream_types.clone()))
+                        .expect("could not synchronize threads");
+                }
             }
         }
     });

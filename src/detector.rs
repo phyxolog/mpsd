@@ -125,7 +125,7 @@ impl Detector for RiffWaveDetector {
         let data_size: usize =
             usize::try_from(header.subchunk2_size).unwrap() + std::mem::size_of::<RiffWaveHeader>();
 
-        let chunk_size: usize = usize::try_from(header.chunk_size + 8).unwrap();
+        let chunk_size: usize = usize::try_from(header.chunk_size).unwrap() + 8;
 
         let min = chunk_size.min(data_size) as f64;
         let max = chunk_size.max(data_size) as f64;
