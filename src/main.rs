@@ -6,6 +6,7 @@ use memmap2::Mmap;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
+use std::iter::Iterator;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -14,6 +15,13 @@ use std::time::{Duration, Instant};
 mod cli;
 mod detector;
 mod extractor;
+
+struct Args {
+    is_extract: bool,
+    file_path: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
+    patterns: HashMap<Bytes, Vec<StreamType>>,
+}
 
 struct State {
     is_extract: bool,
@@ -27,13 +35,6 @@ struct Summary {
     processed_bytes: usize,
     total_stream_size: usize,
     total_stream_count: usize,
-}
-
-struct Args {
-    is_extract: bool,
-    file_path: Option<PathBuf>,
-    output_dir: Option<PathBuf>,
-    patterns: HashMap<Bytes, Vec<StreamType>>,
 }
 
 fn handle_offset(
@@ -96,9 +97,15 @@ fn run(args: Args) -> Summary {
     let start_time = Instant::now();
 
     let (ssx, drx) = mpsc::channel();
-    let patterns: Vec<Bytes> = args.patterns.keys().cloned().collect();
 
-    let ac = AhoCorasick::new(&patterns).unwrap();
+    let (onebyte_patterns, patterns): (Vec<Bytes>, Vec<Bytes>) = args
+        .patterns
+        .keys()
+        .cloned()
+        .into_iter()
+        .partition(|x| x.len() == 1);
+
+    let ac = AhoCorasick::new(&patterns).expect("could not initiate AhoCorasick search engine");
 
     let ssx_cloned = ssx.clone();
     let mmap_cloned = Arc::clone(&mmap);
@@ -110,6 +117,25 @@ fn run(args: Args) -> Summary {
 
             if let Some(stream_types) = patterns_cloned.get(pattern) {
                 ssx_cloned
+                    .send((c.start(), stream_types.clone()))
+                    .expect("could not synchronize threads");
+            }
+        }
+    });
+
+    let onebyte_ac =
+        AhoCorasick::new(&onebyte_patterns).expect("could not initiate AhoCorasick search engine");
+
+    let onebyte_ssx_cloned = ssx.clone();
+    let onebyte_mmap_cloned = Arc::clone(&mmap);
+    let onebyte_patterns_cloned = args.patterns.clone();
+
+    let onebyte_scanner = thread::spawn(move || {
+        for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
+            let pattern = &onebyte_patterns[c.pattern()];
+
+            if let Some(stream_types) = onebyte_patterns_cloned.get(pattern) {
+                onebyte_ssx_cloned
                     .send((c.start(), stream_types.clone()))
                     .expect("could not synchronize threads");
             }
@@ -132,7 +158,7 @@ fn run(args: Args) -> Summary {
     let esx_cloned = esx.clone();
 
     let detector = thread::spawn(move || {
-        let mut state = state_cloned.lock().unwrap();
+        let mut state = state_cloned.lock().expect("could not lock the state");
 
         for (offset, stream_types) in drx {
             handle_offset(&mmap_cloned, offset, &stream_types, &esx_cloned, &mut state);
@@ -153,7 +179,11 @@ fn run(args: Args) -> Summary {
     detector.join().expect("detector thread panicked");
     extractor.join().expect("extractor thread panicked");
 
-    let state = state.lock().unwrap();
+    onebyte_scanner
+        .join()
+        .expect("onebyte scanner thread panicked");
+
+    let state = state.lock().expect("could not lock the state");
 
     Summary {
         process_time: start_time.elapsed(),
