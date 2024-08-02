@@ -27,6 +27,10 @@ Options:
   -h, --help                               Print help
 ```
 
+## Large file support
+
+Large files (> 4 GB) are supported only on 64-bit platforms because of using memory-mapped I/O, which require addressing more memory space than 32-bit systems can provide.
+
 ## Copyright and License
 
 Copyright (c) 2024 Yurii Zhyvaha
