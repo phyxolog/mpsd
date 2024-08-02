@@ -33,6 +33,10 @@ pub struct Cli {
     #[arg(long = "mpeg-max-frames", global = true, default_value_t = 10000)]
     pub mpeg_max_frames: u16,
 
+    /// Do not print log on each found stream
+    #[arg(short = 's', long = "silent", global = true, value_parser = value_parser!(bool), default_value_t = false)]
+    pub silent: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }

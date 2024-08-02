@@ -22,6 +22,7 @@ mod detector;
 mod extractor;
 
 struct Args {
+    silent: bool,
     is_extract: bool,
     file_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
@@ -30,6 +31,7 @@ struct Args {
 }
 
 struct State {
+    silent: bool,
     is_extract: bool,
     total_stream_size: usize,
     total_stream_count: usize,
@@ -52,7 +54,7 @@ fn handle_offset(
     state: &mut State,
 ) {
     for x in stream_types {
-        if (*state).processed_regions.contains(&offset) {
+        if state.processed_regions.contains(&offset) {
             return;
         }
 
@@ -77,7 +79,9 @@ fn handle_offset(
                     .expect("could not synchronize threads");
             }
 
-            println!("--> Found {:?} stream @ {} ({} bytes)", x, offset, size)
+            if !state.silent {
+                println!("--> Found {:?} stream @ {} ({} bytes)", x, offset, size);
+            }
         }
     }
 }
@@ -103,15 +107,14 @@ fn run(args: Args) -> Summary {
     let start_time = Instant::now();
     let (ssx, drx) = mpsc::channel();
 
-    let (onebyte_patterns, patterns): (Vec<Bytes>, Vec<Bytes>) = args
+    let (byte1_patterns, patterns): (Vec<Bytes>, Vec<Bytes>) = args
         .patterns
         .keys()
         .cloned()
         .into_iter()
         .partition(|x| x.len() == 1);
 
-    let ac = AhoCorasick::new(&patterns).expect("could not initiate AhoCorasick search engine");
-
+    let ac = AhoCorasick::new(&patterns).expect("could not initiate AhoCorasick");
     let ssx_cloned = ssx.clone();
     let mmap_cloned = Arc::clone(&mmap);
     let patterns_cloned = args.patterns.clone();
@@ -130,20 +133,18 @@ fn run(args: Args) -> Summary {
         }
     });
 
-    let onebyte_ac =
-        AhoCorasick::new(&onebyte_patterns).expect("could not initiate AhoCorasick search engine");
-
-    let onebyte_ssx_cloned = ssx.clone();
-    let onebyte_mmap_cloned = Arc::clone(&mmap);
+    let byte1_ac = AhoCorasick::new(&byte1_patterns).expect("could not initiate AhoCorasick");
+    let byte1_ssx_cloned = ssx.clone();
+    let byte1_mmap_cloned = Arc::clone(&mmap);
     let patterns_cloned = args.patterns.clone();
 
-    let onebyte_scanner = thread::spawn(move || {
-        if onebyte_ac.patterns_len() > 0 {
-            for c in onebyte_ac.find_iter(&*onebyte_mmap_cloned) {
-                let pattern = &onebyte_patterns[c.pattern()];
+    let byte1_scanner = thread::spawn(move || {
+        if byte1_ac.patterns_len() > 0 {
+            for c in byte1_ac.find_iter(&*byte1_mmap_cloned) {
+                let pattern = &byte1_patterns[c.pattern()];
 
                 if let Some(stream_types) = patterns_cloned.get(pattern) {
-                    onebyte_ssx_cloned
+                    byte1_ssx_cloned
                         .send((c.start(), stream_types.clone()))
                         .expect("could not synchronize threads");
                 }
@@ -156,6 +157,7 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let state = Arc::new(Mutex::new(State {
+        silent: args.silent,
         total_stream_size: 0,
         total_stream_count: 0,
         is_extract: args.is_extract,
@@ -194,16 +196,13 @@ fn run(args: Args) -> Summary {
     scanner.join().expect("scanner thread panicked");
     detector.join().expect("detector thread panicked");
     extractor.join().expect("extractor thread panicked");
-
-    onebyte_scanner
-        .join()
-        .expect("onebyte scanner thread panicked");
+    byte1_scanner.join().expect("byte1 scanner thread panicked");
 
     let state = state.lock().expect("could not lock the state");
 
     Summary {
-        process_time: start_time.elapsed(),
         processed_bytes: mmap.len(),
+        process_time: start_time.elapsed(),
         total_stream_size: (*state).total_stream_size,
         total_stream_count: (*state).total_stream_count,
     }
@@ -224,6 +223,7 @@ fn print_summary(summary: &Summary) {
     let speed_mbps = (processed_bytes / (1024.0 * 1024.0)) / elapsed_seconds;
 
     println!("\n{}", "Summary:\n".bold().underline());
+    println!("-> Processed: {}", humanize_size(summary.processed_bytes));
     println!("-> Process time: {:?}", summary.process_time);
     println!("-> Speed: {:.2} MB/s", speed_mbps);
     println!("-> Found streams: {}", summary.total_stream_count);
@@ -279,6 +279,7 @@ fn main() {
     let mut args = Args {
         patterns,
         detect_options,
+        silent: cli_args.silent,
         output_dir: None,
         file_path: None,
         is_extract: false,

@@ -24,6 +24,7 @@ Options:
       --mp3 <DETECT_MP3>                   Enable MP3 (MPEG-1/2 Audio) detection [default: 1]
       --mpeg-min-frames <MPEG_MIN_FRAMES>  Minimum MPEG frames (0 = disabled) [default: 20]
       --mpeg-max-frames <MPEG_MAX_FRAMES>  Maximum MPEG frames (0 = disabled) [default: 10000]
+  -s, --silent                             Do not print log on each found stream
   -h, --help                               Print help
 ```
 
