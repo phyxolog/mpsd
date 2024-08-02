@@ -1,6 +1,6 @@
 use super::{AacDetector, DetectOptions, Detector, StreamMatch};
 
-fn is_valid_header(bytes: &[u8]) -> bool {
+fn is_valid_frame_header(bytes: &[u8]) -> bool {
     bytes[0] == 0xFF
         && (bytes[1] & 0xF0) == 0xF0
         && (bytes[1] & 0x06) == 0x00
@@ -12,7 +12,7 @@ fn is_valid_header(bytes: &[u8]) -> bool {
 }
 
 fn parse_frame_length(bytes: &[u8]) -> u16 {
-    if !is_valid_header(bytes) {
+    if !is_valid_frame_header(bytes) {
         return 0;
     }
 
