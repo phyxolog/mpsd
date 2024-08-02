@@ -23,17 +23,17 @@ mod extractor;
 
 struct Args {
     is_extract: bool,
-    detect_options: DetectOptions,
     file_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
+    detect_options: DetectOptions,
     patterns: HashMap<Bytes, Vec<StreamType>>,
 }
 
 struct State {
     is_extract: bool,
-    processed_regions: Ranges<usize>,
-    total_stream_count: usize,
     total_stream_size: usize,
+    total_stream_count: usize,
+    processed_regions: Ranges<usize>,
 }
 
 struct Summary {
@@ -57,11 +57,11 @@ fn handle_offset(
         }
 
         let detector: Box<dyn Detector> = match x {
+            StreamType::Aac => Box::new(AacDetector),
             StreamType::Ogg => Box::new(OggDetector),
+            StreamType::Mp3 => Box::new(Mp3Detector),
             StreamType::Bitmap => Box::new(BitmapDetector),
             StreamType::RiffWave => Box::new(RiffWaveDetector),
-            StreamType::Aac => Box::new(AacDetector),
-            StreamType::Mp3 => Box::new(Mp3Detector),
         };
 
         if let Some(StreamMatch { offset, size, ext }) =
@@ -77,10 +77,7 @@ fn handle_offset(
                     .expect("could not synchronize threads");
             }
 
-            println!(
-                "--> Found {:?} ({}) stream @ {} ({} bytes)",
-                x, ext, offset, size
-            )
+            println!("--> Found {:?} stream @ {} ({} bytes)", x, offset, size)
         }
     }
 }
@@ -159,10 +156,10 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let state = Arc::new(Mutex::new(State {
-        processed_regions: Ranges::new(),
         total_stream_size: 0,
         total_stream_count: 0,
         is_extract: args.is_extract,
+        processed_regions: Ranges::new(),
     }));
 
     let state_cloned = Arc::clone(&state);

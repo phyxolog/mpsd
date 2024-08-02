@@ -190,6 +190,10 @@ impl Detector for Mp3Detector {
         let mut layer: MpegLayer = MpegLayer::Layer3;
 
         loop {
+            if offset + size >= buffer.len() {
+                break;
+            }
+
             if offset2 + 3 > buffer.len() {
                 break;
             }
