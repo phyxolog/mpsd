@@ -25,6 +25,14 @@ pub struct Cli {
     #[arg(long = "mp3", global = true, value_parser = value_parser!(u8).range(0..=1), default_value_t = 1)]
     pub detect_mp3: u8,
 
+    /// Minimum MPEG frames (0 = disabled)
+    #[arg(long = "mpeg-min-frames", global = true, default_value_t = 20)]
+    pub mpeg_min_frames: u8,
+
+    /// Maximum MPEG frames (0 = disabled)
+    #[arg(long = "mpeg-max-frames", global = true, default_value_t = 10000)]
+    pub mpeg_max_frames: u16,
+
     #[command(subcommand)]
     pub command: Commands,
 }

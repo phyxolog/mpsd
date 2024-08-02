@@ -2,6 +2,7 @@ use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
 use memmap2::Mmap;
+use ranges::Ranges;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -12,7 +13,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use detector::{
-    AacDetector, BitmapDetector, Detector, Mp3Detector, OggDetector, RiffWaveDetector, StreamType,
+    AacDetector, BitmapDetector, DetectOptions, Detector, Mp3Detector, OggDetector,
+    RiffWaveDetector, StreamType,
 };
 
 mod cli;
@@ -21,6 +23,7 @@ mod extractor;
 
 struct Args {
     is_extract: bool,
+    detect_options: DetectOptions,
     file_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     patterns: HashMap<Bytes, Vec<StreamType>>,
@@ -28,7 +31,7 @@ struct Args {
 
 struct State {
     is_extract: bool,
-    skip_offset: usize,
+    processed_regions: Ranges<usize>,
     total_stream_count: usize,
     total_stream_size: usize,
 }
@@ -45,10 +48,11 @@ fn handle_offset(
     offset: usize,
     stream_types: &Vec<StreamType>,
     extractor: &mpsc::Sender<(usize, usize, StreamType)>,
+    detect_options: &DetectOptions,
     state: &mut State,
 ) {
     for x in stream_types {
-        if offset <= state.skip_offset {
+        if (*state).processed_regions.contains(&offset) {
             return;
         }
 
@@ -60,10 +64,10 @@ fn handle_offset(
             StreamType::Mp3 => Box::new(Mp3Detector),
         };
 
-        if let Some((offset, size)) = detector.detect(buffer, offset) {
+        if let Some((offset, size)) = detector.detect(buffer, offset, detect_options) {
             (*state).total_stream_count += 1;
             (*state).total_stream_size += size;
-            (*state).skip_offset = offset + size;
+            (*state).processed_regions.insert(offset..=(offset + size));
 
             if state.is_extract {
                 extractor
@@ -71,10 +75,7 @@ fn handle_offset(
                     .expect("could not synchronize threads");
             }
 
-            println!(
-                "--> Found {:?} stream @ {:#016X} ({} bytes)",
-                x, offset, size
-            )
+            println!("--> Found {:?} stream @ {} ({} bytes)", x, offset, size)
         }
     }
 }
@@ -153,7 +154,7 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let state = Arc::new(Mutex::new(State {
-        skip_offset: 0,
+        processed_regions: Ranges::new(),
         total_stream_size: 0,
         total_stream_count: 0,
         is_extract: args.is_extract,
@@ -167,7 +168,14 @@ fn run(args: Args) -> Summary {
         let mut state = state_cloned.lock().expect("could not lock the state");
 
         for (offset, stream_types) in drx {
-            handle_offset(&mmap_cloned, offset, &stream_types, &esx_cloned, &mut state);
+            handle_offset(
+                &mmap_cloned,
+                offset,
+                &stream_types,
+                &esx_cloned,
+                &args.detect_options,
+                &mut state,
+            );
         }
     });
 
@@ -227,6 +235,11 @@ fn print_summary(summary: &Summary) {
 fn main() {
     let cli_args: cli::Cli = cli::parse();
 
+    let detect_options = DetectOptions {
+        mpeg_min_frames: cli_args.mpeg_min_frames,
+        mpeg_max_frames: cli_args.mpeg_max_frames,
+    };
+
     let mut patterns: HashMap<Bytes, Vec<StreamType>> = HashMap::from([
         (Bytes::from("OggS"), vec![StreamType::Ogg]),
         (Bytes::from("BM"), vec![StreamType::Bitmap]),
@@ -263,6 +276,7 @@ fn main() {
 
     let mut args = Args {
         patterns,
+        detect_options,
         output_dir: None,
         file_path: None,
         is_extract: false,

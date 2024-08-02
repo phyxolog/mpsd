@@ -4,6 +4,11 @@ pub mod mp3;
 pub mod ogg;
 pub mod riff_wave;
 
+pub struct DetectOptions {
+    pub mpeg_min_frames: u8,
+    pub mpeg_max_frames: u16,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum StreamType {
     RiffWave,
@@ -14,7 +19,7 @@ pub enum StreamType {
 }
 
 pub trait Detector {
-    fn detect(&self, buffer: &[u8], offset: usize) -> Option<(usize, usize)>;
+    fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<(usize, usize)>;
 }
 
 pub struct RiffWaveDetector;

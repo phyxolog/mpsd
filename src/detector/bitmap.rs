@@ -1,4 +1,4 @@
-use crate::detector::{BitmapDetector, Detector};
+use crate::detector::{BitmapDetector, DetectOptions, Detector};
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -22,7 +22,12 @@ struct BitmapHeader {
 }
 
 impl Detector for BitmapDetector {
-    fn detect(&self, buffer: &[u8], offset: usize) -> Option<(usize, usize)> {
+    fn detect(
+        &self,
+        buffer: &[u8],
+        offset: usize,
+        _opts: &DetectOptions,
+    ) -> Option<(usize, usize)> {
         if offset + std::mem::size_of::<BitmapHeader>() > buffer.len() {
             return None;
         }

@@ -1,7 +1,12 @@
-use crate::detector::{AacDetector, Detector};
+use crate::detector::{AacDetector, DetectOptions, Detector};
 
 impl Detector for AacDetector {
-    fn detect(&self, _buffer: &[u8], _offset: usize) -> Option<(usize, usize)> {
+    fn detect(
+        &self,
+        _buffer: &[u8],
+        _offset: usize,
+        _opts: &DetectOptions,
+    ) -> Option<(usize, usize)> {
         None
     }
 }

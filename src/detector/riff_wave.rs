@@ -1,4 +1,4 @@
-use crate::detector::{Detector, RiffWaveDetector};
+use crate::detector::{DetectOptions, Detector, RiffWaveDetector};
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -19,7 +19,12 @@ struct RiffWaveHeader {
 }
 
 impl Detector for RiffWaveDetector {
-    fn detect(&self, buffer: &[u8], offset: usize) -> Option<(usize, usize)> {
+    fn detect(
+        &self,
+        buffer: &[u8],
+        offset: usize,
+        _opts: &DetectOptions,
+    ) -> Option<(usize, usize)> {
         if offset + std::mem::size_of::<RiffWaveHeader>() > buffer.len() {
             return None;
         }
