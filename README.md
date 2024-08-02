@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Multi-Pattern Streams Detector is a file scanning and extraction command-line tool designed to detect and extract various stream types (formats) within a binary file. Uses the Aho-Corasick algorithm for efficient multi-pattern searching and processes files using memory-mapped I/O for performance.
+Multi-Pattern Streams Detector is a file scanning and extraction command-line tool designed to detect and extract various stream types (formats) within a binary file. Uses the Aho-Corasick algorithm for efficient multi-pattern searching and processes files using memory-mapped I/O for performance.
 
 ## Usage
 
