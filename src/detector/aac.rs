@@ -27,8 +27,8 @@ fn parse_frame_length(bytes: &[u8]) -> u16 {
 impl Detector for AacDetector {
     fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<StreamMatch> {
         let mut offset2 = offset;
-        let mut size: usize = 0;
-        let mut frames: usize = 0;
+        let mut size = 0;
+        let mut frames = 0;
 
         loop {
             if offset + size >= buffer.len() {
@@ -45,7 +45,7 @@ impl Detector for AacDetector {
             }
 
             let bytes = &buffer[offset2..offset2 + 7];
-            let frame_length: usize = parse_frame_length(bytes) as usize;
+            let frame_length = parse_frame_length(bytes) as usize;
 
             if frame_length > 0 {
                 frames += 1;

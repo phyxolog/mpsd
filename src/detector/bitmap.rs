@@ -49,7 +49,7 @@ impl Detector for BitmapDetector {
             return None;
         }
 
-        let mut size: usize = usize::try_from(header.size).unwrap();
+        let mut size = usize::try_from(header.size).unwrap();
 
         if offset + size > buffer.len() {
             size = buffer.len() - offset;

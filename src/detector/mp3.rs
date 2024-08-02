@@ -185,8 +185,8 @@ fn parse_frame_header(bytes: &[u8]) -> Option<FrameHeader> {
 impl Detector for Mp3Detector {
     fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<StreamMatch> {
         let mut offset2 = offset;
-        let mut size: usize = 0;
-        let mut frames: usize = 0;
+        let mut size = 0;
+        let mut frames = 0;
         let mut layer: MpegLayer = MpegLayer::Layer3;
 
         loop {

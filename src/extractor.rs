@@ -18,7 +18,7 @@ pub fn extract(
         .open(&output_path)
         .expect("failed to create a file");
 
-    let mut bytes_written: usize = 0;
+    let mut bytes_written = 0;
     let mut buffer_size = 128 * 1024;
 
     while bytes_written < size {
