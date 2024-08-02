@@ -49,10 +49,10 @@ impl Detector for BitmapDetector {
             return None;
         }
 
-        let size: usize = usize::try_from(header.size).unwrap();
+        let mut size: usize = usize::try_from(header.size).unwrap();
 
         if offset + size > buffer.len() {
-            return None;
+            size = buffer.len() - offset;
         }
 
         return Some(StreamMatch {

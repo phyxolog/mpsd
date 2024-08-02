@@ -47,7 +47,7 @@ fn handle_offset(
     buffer: &Mmap,
     offset: usize,
     stream_types: &Vec<StreamType>,
-    extractor: &mpsc::Sender<(usize, usize, String, StreamType)>,
+    extractor: &mpsc::Sender<(usize, usize, String)>,
     detect_options: &DetectOptions,
     state: &mut State,
 ) {
@@ -73,7 +73,7 @@ fn handle_offset(
 
             if state.is_extract {
                 extractor
-                    .send((offset, size, ext.to_string(), *x))
+                    .send((offset, size, ext.to_string()))
                     .expect("could not synchronize threads");
             }
 
@@ -186,15 +186,8 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let extractor = thread::spawn(move || {
-        for (offset, size, ext, stream_type) in erx {
-            extractor::extract(
-                &mmap_cloned,
-                offset,
-                size,
-                &stream_type,
-                &ext,
-                &output_dir_cloned,
-            );
+        for (offset, size, ext) in erx {
+            extractor::extract(&mmap_cloned, offset, size, &ext, &output_dir_cloned);
         }
     });
 

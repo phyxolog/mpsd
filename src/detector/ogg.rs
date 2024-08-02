@@ -69,7 +69,7 @@ impl Detector for OggDetector {
         }
 
         if offset + size > buffer.len() {
-            return None;
+            size = buffer.len() - offset;
         }
 
         return Some(StreamMatch {

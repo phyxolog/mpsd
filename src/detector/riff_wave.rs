@@ -69,7 +69,7 @@ impl Detector for RiffWaveDetector {
             return None;
         }
 
-        let data_size: usize =
+        let mut data_size: usize =
             usize::try_from(header.subchunk2_size).unwrap() + std::mem::size_of::<RiffWaveHeader>();
 
         let chunk_size: usize = usize::try_from(header.chunk_size).unwrap() + 8;
@@ -86,7 +86,7 @@ impl Detector for RiffWaveDetector {
         // data_size is more directly relevant because it indicates the amount
         // of actual audio data
         if offset + data_size > buffer.len() {
-            return None;
+            data_size = buffer.len() - offset;
         }
 
         return Some(StreamMatch {
