@@ -34,16 +34,16 @@ struct Args {
 struct State {
     silent: bool,
     is_extract: bool,
-    total_stream_size: usize,
-    total_stream_count: usize,
+    total_streams_size: usize,
+    total_streams_count: usize,
     processed_regions: RangeSetBlaze<usize>,
 }
 
 struct Summary {
     process_time: Duration,
     processed_bytes: usize,
-    total_stream_size: usize,
-    total_stream_count: usize,
+    total_streams_size: usize,
+    total_streams_count: usize,
 }
 
 fn handle_offset(
@@ -70,8 +70,8 @@ fn handle_offset(
         if let Some(StreamMatch { offset, size, ext }) =
             detector.detect(buffer, offset, detect_options)
         {
-            (*state).total_stream_count += 1;
-            (*state).total_stream_size += size;
+            (*state).total_streams_count += 1;
+            (*state).total_streams_size += size;
             (*state)
                 .processed_regions
                 .ranges_insert(offset..=(offset + size));
@@ -165,8 +165,8 @@ fn run(args: Args) -> Summary {
 
     let state = Arc::new(Mutex::new(State {
         silent: args.silent,
-        total_stream_size: 0,
-        total_stream_count: 0,
+        total_streams_size: 0,
+        total_streams_count: 0,
         is_extract: args.is_extract,
         processed_regions: RangeSetBlaze::new(),
     }));
@@ -210,10 +210,10 @@ fn run(args: Args) -> Summary {
     if args.is_extract && args.erase_regions {
         let total_erased_bytes = eraser::erase_regions(&file, &state.processed_regions);
 
-        if total_erased_bytes != state.total_stream_size {
+        if total_erased_bytes != state.total_streams_size {
             println!(
-                "Total erased bytes ({}) does not match the total stream size ({})",
-                total_erased_bytes, state.total_stream_size
+                "Total erased bytes ({}) does not match the total streams size ({})",
+                total_erased_bytes, state.total_streams_size
             );
         }
     }
@@ -221,8 +221,8 @@ fn run(args: Args) -> Summary {
     Summary {
         processed_bytes: mmap.len(),
         process_time: start_time.elapsed(),
-        total_stream_size: state.total_stream_size,
-        total_stream_count: state.total_stream_count,
+        total_streams_size: state.total_streams_size,
+        total_streams_count: state.total_streams_count,
     }
 }
 
@@ -244,11 +244,11 @@ fn print_summary(summary: &Summary) {
     println!("-> Processed: {}", humanize_size(summary.processed_bytes));
     println!("-> Process time: {:?}", summary.process_time);
     println!("-> Speed: {:.2} MB/s", speed_mbps);
-    println!("-> Found streams: {}", summary.total_stream_count);
+    println!("-> Found streams: {}", summary.total_streams_count);
     println!(
         "-> Size of found streams: {} ({} bytes)",
-        humanize_size(summary.total_stream_size),
-        summary.total_stream_size
+        humanize_size(summary.total_streams_size),
+        summary.total_streams_size
     );
 }
 
