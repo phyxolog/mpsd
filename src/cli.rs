@@ -33,13 +33,13 @@ pub struct Cli {
     #[arg(long = "mpeg-max-frames", global = true, default_value_t = 10000)]
     pub mpeg_max_frames: u16,
 
-    /// Replace the found regions in the input file with zeros
+    /// Replace the found sectors in the input file with zeros
     /// WARNING: backup the input file to prevent data loss
     /// Could be enabled only in "Extract" mode
-    #[arg(long = "erase-regions", global = true, value_parser = value_parser!(bool), default_value_t = false, verbatim_doc_comment)]
-    pub erase_regions: bool,
+    #[arg(long = "erase-sectors", global = true, value_parser = value_parser!(bool), default_value_t = false, verbatim_doc_comment)]
+    pub erase_sectors: bool,
 
-    /// Do not print a log for each found stream
+    /// Do not print a log for each found/injected stream
     #[arg(short = 's', long = "silent", global = true, value_parser = value_parser!(bool), default_value_t = false)]
     pub silent: bool,
 
@@ -52,17 +52,26 @@ pub enum Commands {
     /// Scan input file
     #[command(arg_required_else_help = true)]
     Scan {
-        /// Path for the input file
+        /// Path to the input file
         file_path: String,
     },
     /// Extract streams from input file
     #[command(arg_required_else_help = true)]
     Extract {
-        /// Path for the input file
+        /// Path to the input file
         file_path: String,
 
-        /// Path for the output folder (for extracted files)
+        /// Path to the output folder (for extracted files)
         output_dir: String,
+    },
+    /// Inject streams back to the input file from the given folder
+    #[command(arg_required_else_help = true)]
+    Inject {
+        /// Path to the input file
+        file_path: String,
+
+        /// Path to the input folder (with extracted files)
+        input_dir: String,
     },
 }
 

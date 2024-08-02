@@ -14,6 +14,7 @@ Usage: mpsd [OPTIONS] <COMMAND>
 Commands:
   scan     Scan input file
   extract  Extract streams from input file
+  inject   Inject streams back to the input file from the given folder
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -24,7 +25,10 @@ Options:
       --mp3 <DETECT_MP3>                   Enable MP3 (MPEG-1/2 Audio) detection [default: 1]
       --mpeg-min-frames <MPEG_MIN_FRAMES>  Minimum MPEG frames (0 = disabled) [default: 20]
       --mpeg-max-frames <MPEG_MAX_FRAMES>  Maximum MPEG frames (0 = disabled) [default: 10000]
-  -s, --silent                             Do not print log on each found stream
+      --erase-sectors                      Replace the found sectors in the input file with zeros
+                                           WARNING: backup the input file to prevent data loss
+                                           Could be enabled only in "Extract" mode
+  -s, --silent                             Do not print a log for each found/injected stream
   -h, --help                               Print help
 ```
 

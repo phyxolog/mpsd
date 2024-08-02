@@ -10,3 +10,4 @@ bytes = "1.6.1"
 colored = "2.1.0"
 clap = { version = "4.5.11", features = ["derive"] }
 range-set-blaze = "0.1.16"
+glob = "0.3.1"

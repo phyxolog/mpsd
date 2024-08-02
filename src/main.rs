@@ -1,7 +1,8 @@
 use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
-use memmap2::Mmap;
+use glob::glob;
+use memmap2::{Mmap, MmapMut};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -20,12 +21,14 @@ mod cli;
 mod detector;
 mod eraser;
 mod extractor;
+mod injector;
 
 struct Args {
     silent: bool,
     is_extract: bool,
-    erase_regions: bool,
+    erase_sectors: bool,
     file_path: Option<PathBuf>,
+    input_dir: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     detect_options: DetectOptions,
     patterns: HashMap<Bytes, Vec<StreamType>>,
@@ -36,7 +39,7 @@ struct State {
     is_extract: bool,
     total_streams_size: usize,
     total_streams_count: usize,
-    processed_regions: RangeSetBlaze<usize>,
+    processed_sectors: RangeSetBlaze<usize>,
 }
 
 struct Summary {
@@ -55,7 +58,7 @@ fn handle_offset(
     state: &mut State,
 ) {
     for x in stream_types {
-        if state.processed_regions.contains(offset) {
+        if state.processed_sectors.contains(offset) {
             return;
         }
 
@@ -70,11 +73,10 @@ fn handle_offset(
         if let Some(StreamMatch { offset, size, ext }) =
             detector.detect(buffer, offset, detect_options)
         {
+            let sector = offset..=(offset + size);
             (*state).total_streams_count += 1;
             (*state).total_streams_size += size;
-            (*state)
-                .processed_regions
-                .ranges_insert(offset..=(offset + size));
+            (*state).processed_sectors.ranges_insert(sector);
 
             if state.is_extract {
                 extractor
@@ -90,7 +92,8 @@ fn handle_offset(
 }
 
 fn run(args: Args) -> Summary {
-    let file_path = args.file_path.expect("file path is empty");
+    let file_path = args.file_path.expect("file path is not set");
+
     let file = OpenOptions::new()
         .write(true)
         .read(true)
@@ -102,7 +105,7 @@ fn run(args: Args) -> Summary {
     let mut output_dir: PathBuf = PathBuf::new();
 
     if args.is_extract {
-        output_dir = args.output_dir.expect("output directory is empty");
+        output_dir = args.output_dir.expect("output directory is not set");
     }
 
     let output_dir_cloned = output_dir.clone();
@@ -168,7 +171,7 @@ fn run(args: Args) -> Summary {
         total_streams_size: 0,
         total_streams_count: 0,
         is_extract: args.is_extract,
-        processed_regions: RangeSetBlaze::new(),
+        processed_sectors: RangeSetBlaze::new(),
     }));
 
     let state_cloned = Arc::clone(&state);
@@ -207,8 +210,8 @@ fn run(args: Args) -> Summary {
 
     let state = state.lock().expect("could not lock the state");
 
-    if args.is_extract && args.erase_regions {
-        let total_erased_bytes = eraser::erase_regions(&file, &state.processed_regions);
+    if args.is_extract && args.erase_sectors {
+        let total_erased_bytes = eraser::erase_sectors(&file, &state.processed_sectors);
 
         if total_erased_bytes != state.total_streams_size {
             println!(
@@ -224,6 +227,63 @@ fn run(args: Args) -> Summary {
         total_streams_size: state.total_streams_size,
         total_streams_count: state.total_streams_count,
     }
+}
+
+fn run_injector(args: Args) {
+    let input_dir = args.input_dir.expect("input dir is not set");
+    let input_path = input_dir.as_path().join("*_*.*");
+
+    let file_path = args.file_path.expect("file path is not set");
+
+    let dst = OpenOptions::new()
+        .write(true)
+        .read(true)
+        .open(file_path)
+        .expect("failed to open the file");
+
+    let input_path_str = input_path.to_str().expect("failed to get input path");
+
+    let mut mmap_dst = unsafe { MmapMut::map_mut(&dst).expect("failed to mmap the file") };
+
+    for entry in glob(&input_path_str).unwrap() {
+        if let Ok(path) = entry {
+            let file_name = path.file_stem().unwrap().to_str().unwrap();
+            let parts: Vec<&str> = file_name.split('_').collect();
+
+            match parts.as_slice() {
+                [offset, size] => {
+                    let offset = offset.parse::<i128>().unwrap_or(-1);
+                    let size = size.parse::<i128>().unwrap_or(-1);
+
+                    if offset == -1 || size == -1 {
+                        continue;
+                    }
+
+                    let src = OpenOptions::new()
+                        .read(true)
+                        .open(path)
+                        .expect("failed to open the file");
+
+                    let total_injected_bytes =
+                        injector::inject(&src, &mut mmap_dst, offset as usize, size as usize);
+
+                    if total_injected_bytes != size as usize {
+                        println!(
+                            "Total injected bytes ({}) does not match the stream size ({})",
+                            total_injected_bytes, size
+                        );
+                    }
+
+                    if !args.silent {
+                        println!("--> Injected {} bytes @ {}", size, offset);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    mmap_dst.flush().expect("failed to save file on disk");
 }
 
 fn humanize_size(bytes: usize) -> String {
@@ -298,7 +358,8 @@ fn main() {
         patterns,
         detect_options,
         silent: cli_args.silent,
-        erase_regions: cli_args.erase_regions,
+        erase_sectors: cli_args.erase_sectors,
+        input_dir: None,
         output_dir: None,
         file_path: None,
         is_extract: false,
@@ -321,6 +382,15 @@ fn main() {
             args.output_dir = Some(PathBuf::from(output_dir));
             let summary: Summary = run(args);
             print_summary(&summary);
+        }
+        cli::Commands::Inject {
+            file_path,
+            input_dir,
+        } => {
+            println!("-> Injecting...");
+            args.file_path = Some(PathBuf::from(file_path));
+            args.input_dir = Some(PathBuf::from(input_dir));
+            run_injector(args);
         }
     }
 }
