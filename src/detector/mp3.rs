@@ -201,6 +201,10 @@ impl Detector for Mp3Detector {
             let bytes = &buffer[offset2..offset2 + 3];
 
             if let Some(frame_header) = parse_frame_header(bytes) {
+                if frames > 0 && frame_header.layer != layer {
+                    break;
+                }
+
                 layer = frame_header.layer;
                 size += frame_header.data_size;
                 offset2 += frame_header.data_size;
