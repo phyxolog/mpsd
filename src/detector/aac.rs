@@ -32,6 +32,7 @@ impl Detector for AacDetector {
 
         loop {
             if offset + size >= buffer.len() {
+                size = buffer.len() - offset;
                 break;
             }
 

@@ -191,6 +191,7 @@ impl Detector for Mp3Detector {
 
         loop {
             if offset + size >= buffer.len() {
+                size = buffer.len() - offset;
                 break;
             }
 

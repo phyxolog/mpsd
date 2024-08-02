@@ -186,8 +186,15 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let extractor = thread::spawn(move || {
-        for (offset, size, _ext, stream_type) in erx {
-            extractor::extract(&mmap_cloned, offset, size, &stream_type, &output_dir_cloned);
+        for (offset, size, ext, stream_type) in erx {
+            extractor::extract(
+                &mmap_cloned,
+                offset,
+                size,
+                &stream_type,
+                &ext,
+                &output_dir_cloned,
+            );
         }
     });
 

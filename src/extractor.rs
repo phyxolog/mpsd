@@ -7,6 +7,7 @@ pub fn extract(
     _offset: usize,
     _size: usize,
     _stream_type: &StreamType,
+    _ext: &str,
     _output_dir: &PathBuf,
 ) -> usize {
     0
