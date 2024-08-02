@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use detector::{
     AacDetector, BitmapDetector, DetectOptions, Detector, Mp3Detector, OggDetector,
-    RiffWaveDetector, StreamType,
+    RiffWaveDetector, StreamMatch, StreamType,
 };
 
 mod cli;
@@ -47,7 +47,7 @@ fn handle_offset(
     buffer: &Mmap,
     offset: usize,
     stream_types: &Vec<StreamType>,
-    extractor: &mpsc::Sender<(usize, usize, StreamType)>,
+    extractor: &mpsc::Sender<(usize, usize, String, StreamType)>,
     detect_options: &DetectOptions,
     state: &mut State,
 ) {
@@ -64,18 +64,23 @@ fn handle_offset(
             StreamType::Mp3 => Box::new(Mp3Detector),
         };
 
-        if let Some((offset, size)) = detector.detect(buffer, offset, detect_options) {
+        if let Some(StreamMatch { offset, size, ext }) =
+            detector.detect(buffer, offset, detect_options)
+        {
             (*state).total_stream_count += 1;
             (*state).total_stream_size += size;
             (*state).processed_regions.insert(offset..=(offset + size));
 
             if state.is_extract {
                 extractor
-                    .send((offset, size, *x))
+                    .send((offset, size, ext.to_string(), *x))
                     .expect("could not synchronize threads");
             }
 
-            println!("--> Found {:?} stream @ {} ({} bytes)", x, offset, size)
+            println!(
+                "--> Found {:?} ({}) stream @ {} ({} bytes)",
+                x, ext, offset, size
+            )
         }
     }
 }
@@ -184,7 +189,7 @@ fn run(args: Args) -> Summary {
     let mmap_cloned = Arc::clone(&mmap);
 
     let extractor = thread::spawn(move || {
-        for (offset, size, stream_type) in erx {
+        for (offset, size, _ext, stream_type) in erx {
             extractor::extract(&mmap_cloned, offset, size, &stream_type, &output_dir_cloned);
         }
     });

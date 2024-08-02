@@ -1,4 +1,4 @@
-use crate::detector::{DetectOptions, Detector, OggDetector};
+use super::{DetectOptions, Detector, OggDetector, StreamMatch};
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -14,12 +14,7 @@ struct OggHeader {
 }
 
 impl Detector for OggDetector {
-    fn detect(
-        &self,
-        buffer: &[u8],
-        offset: usize,
-        _opts: &DetectOptions,
-    ) -> Option<(usize, usize)> {
+    fn detect(&self, buffer: &[u8], offset: usize, _opts: &DetectOptions) -> Option<StreamMatch> {
         let mut size = 0;
         let mut offset2 = offset;
         let mut first_occurrence = true;
@@ -77,6 +72,10 @@ impl Detector for OggDetector {
             return None;
         }
 
-        return Some((offset, size));
+        return Some(StreamMatch {
+            offset,
+            size,
+            ext: "ogg",
+        });
     }
 }

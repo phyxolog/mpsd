@@ -1,4 +1,4 @@
-use crate::detector::{DetectOptions, Detector, Mp3Detector};
+use super::{DetectOptions, Detector, Mp3Detector, StreamMatch};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[allow(clippy::enum_variant_names)]
@@ -183,10 +183,11 @@ fn parse_frame_header(bytes: &[u8]) -> Option<FrameHeader> {
 }
 
 impl Detector for Mp3Detector {
-    fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<(usize, usize)> {
+    fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<StreamMatch> {
         let mut offset2 = offset;
         let mut size: usize = 0;
         let mut frames: usize = 0;
+        let mut layer: MpegLayer = MpegLayer::Layer3;
 
         loop {
             if offset2 + 3 > buffer.len() {
@@ -200,6 +201,7 @@ impl Detector for Mp3Detector {
             let bytes = &buffer[offset2..offset2 + 3];
 
             if let Some(frame_header) = parse_frame_header(bytes) {
+                layer = frame_header.layer;
                 size += frame_header.data_size;
                 offset2 += frame_header.data_size;
                 frames += 1;
@@ -212,8 +214,14 @@ impl Detector for Mp3Detector {
             return None;
         }
 
+        let ext = match layer {
+            MpegLayer::Layer1 => "mp1",
+            MpegLayer::Layer2 => "mp2",
+            MpegLayer::Layer3 => "mp3",
+        };
+
         if size > 0 {
-            return Some((offset, size));
+            return Some(StreamMatch { offset, size, ext });
         }
 
         return None;

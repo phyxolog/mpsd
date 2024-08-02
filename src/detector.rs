@@ -9,6 +9,12 @@ pub struct DetectOptions {
     pub mpeg_max_frames: u16,
 }
 
+pub struct StreamMatch<'a> {
+    pub offset: usize,
+    pub size: usize,
+    pub ext: &'a str,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum StreamType {
     RiffWave,
@@ -19,7 +25,7 @@ pub enum StreamType {
 }
 
 pub trait Detector {
-    fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<(usize, usize)>;
+    fn detect(&self, buffer: &[u8], offset: usize, opts: &DetectOptions) -> Option<StreamMatch>;
 }
 
 pub struct RiffWaveDetector;

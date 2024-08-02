@@ -1,4 +1,4 @@
-use crate::detector::{BitmapDetector, DetectOptions, Detector};
+use super::{BitmapDetector, DetectOptions, Detector, StreamMatch};
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
@@ -22,12 +22,7 @@ struct BitmapHeader {
 }
 
 impl Detector for BitmapDetector {
-    fn detect(
-        &self,
-        buffer: &[u8],
-        offset: usize,
-        _opts: &DetectOptions,
-    ) -> Option<(usize, usize)> {
+    fn detect(&self, buffer: &[u8], offset: usize, _opts: &DetectOptions) -> Option<StreamMatch> {
         if offset + std::mem::size_of::<BitmapHeader>() > buffer.len() {
             return None;
         }
@@ -60,6 +55,10 @@ impl Detector for BitmapDetector {
             return None;
         }
 
-        return Some((offset, size));
+        return Some(StreamMatch {
+            offset,
+            size,
+            ext: "bmp",
+        });
     }
 }
