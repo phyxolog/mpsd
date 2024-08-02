@@ -33,7 +33,13 @@ pub struct Cli {
     #[arg(long = "mpeg-max-frames", global = true, default_value_t = 10000)]
     pub mpeg_max_frames: u16,
 
-    /// Do not print log on each found stream
+    /// Replace the found regions in the input file with zeros
+    /// WARNING: backup the input file to prevent data loss
+    /// Could be enabled only in "Extract" mode
+    #[arg(long = "erase-regions", global = true, value_parser = value_parser!(bool), default_value_t = false, verbatim_doc_comment)]
+    pub erase_regions: bool,
+
+    /// Do not print a log for each found stream
     #[arg(short = 's', long = "silent", global = true, value_parser = value_parser!(bool), default_value_t = false)]
     pub silent: bool,
 

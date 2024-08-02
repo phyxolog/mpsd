@@ -2,10 +2,9 @@ use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
 use memmap2::Mmap;
-use ranges::Ranges;
+use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
-use std::fs;
-use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::iter::Iterator;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
@@ -19,11 +18,13 @@ use detector::{
 
 mod cli;
 mod detector;
+mod eraser;
 mod extractor;
 
 struct Args {
     silent: bool,
     is_extract: bool,
+    erase_regions: bool,
     file_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     detect_options: DetectOptions,
@@ -35,7 +36,7 @@ struct State {
     is_extract: bool,
     total_stream_size: usize,
     total_stream_count: usize,
-    processed_regions: Ranges<usize>,
+    processed_regions: RangeSetBlaze<usize>,
 }
 
 struct Summary {
@@ -54,7 +55,7 @@ fn handle_offset(
     state: &mut State,
 ) {
     for x in stream_types {
-        if state.processed_regions.contains(&offset) {
+        if state.processed_regions.contains(offset) {
             return;
         }
 
@@ -71,7 +72,9 @@ fn handle_offset(
         {
             (*state).total_stream_count += 1;
             (*state).total_stream_size += size;
-            (*state).processed_regions.insert(offset..=(offset + size));
+            (*state)
+                .processed_regions
+                .ranges_insert(offset..=(offset + size));
 
             if state.is_extract {
                 extractor
@@ -88,9 +91,13 @@ fn handle_offset(
 
 fn run(args: Args) -> Summary {
     let file_path = args.file_path.expect("file path is empty");
-    let file = File::open(file_path).expect("failed to open the file");
+    let file = OpenOptions::new()
+        .write(true)
+        .read(true)
+        .open(file_path)
+        .expect("failed to open the file");
 
-    let mmap = Arc::new(unsafe { Mmap::map(&file).expect("failed to map the file") });
+    let mmap = Arc::new(unsafe { Mmap::map(&file).expect("failed to mmap the file") });
 
     let mut output_dir: PathBuf = PathBuf::new();
 
@@ -161,7 +168,7 @@ fn run(args: Args) -> Summary {
         total_stream_size: 0,
         total_stream_count: 0,
         is_extract: args.is_extract,
-        processed_regions: Ranges::new(),
+        processed_regions: RangeSetBlaze::new(),
     }));
 
     let state_cloned = Arc::clone(&state);
@@ -200,11 +207,22 @@ fn run(args: Args) -> Summary {
 
     let state = state.lock().expect("could not lock the state");
 
+    if args.is_extract && args.erase_regions {
+        let total_erased_bytes = eraser::erase_regions(&file, &state.processed_regions);
+
+        if total_erased_bytes != state.total_stream_size {
+            println!(
+                "Total erased bytes ({}) does not match the total stream size ({})",
+                total_erased_bytes, state.total_stream_size
+            );
+        }
+    }
+
     Summary {
         processed_bytes: mmap.len(),
         process_time: start_time.elapsed(),
-        total_stream_size: (*state).total_stream_size,
-        total_stream_count: (*state).total_stream_count,
+        total_stream_size: state.total_stream_size,
+        total_stream_count: state.total_stream_count,
     }
 }
 
@@ -280,6 +298,7 @@ fn main() {
         patterns,
         detect_options,
         silent: cli_args.silent,
+        erase_regions: cli_args.erase_regions,
         output_dir: None,
         file_path: None,
         is_extract: false,
