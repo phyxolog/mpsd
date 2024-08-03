@@ -2,6 +2,7 @@ use aho_corasick::AhoCorasick;
 use bytes::Bytes;
 use colored::Colorize;
 use glob::glob;
+use injector::is_mmap_support;
 use memmap2::{Mmap, MmapMut};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
@@ -214,7 +215,7 @@ fn run(args: Args) -> Summary {
         let total_erased_bytes = eraser::erase_sectors(&file, &state.processed_sectors);
 
         if total_erased_bytes != state.total_streams_size {
-            println!(
+            eprintln!(
                 "Total erased bytes ({}) does not match the total streams size ({})",
                 total_erased_bytes, state.total_streams_size
             );
@@ -230,10 +231,9 @@ fn run(args: Args) -> Summary {
 }
 
 fn run_injector(args: Args) {
+    let file_path = args.file_path.expect("file path is not set");
     let input_dir = args.input_dir.expect("input dir is not set");
     let input_path = input_dir.as_path();
-
-    let file_path = args.file_path.expect("file path is not set");
 
     let dst = OpenOptions::new()
         .write(true)
@@ -241,35 +241,87 @@ fn run_injector(args: Args) {
         .open(file_path)
         .expect("failed to open the file");
 
-    let input_path_str = input_path.to_str().expect("failed to get input path");
+    let input_path_str = input_path
+        .to_str()
+        .expect("failed to get input path")
+        .to_owned();
 
-    let mut mmap_dst = unsafe { MmapMut::map_mut(&dst).expect("failed to mmap the file") };
+    let (sx, rx) = mpsc::channel();
+    let sx_cloned = sx.clone();
 
-    for entry in glob(&input_path_str).unwrap() {
-        if let Ok(path) = entry {
-            let file_name = path.file_stem().unwrap().to_str().unwrap();
-            let offset = file_name.parse::<i128>().unwrap_or(-1);
+    let mut is_mmap_used = false;
 
-            if offset == -1 {
-                continue;
+    let mmap_dst = Arc::new(Mutex::new(if is_mmap_support(&dst) {
+        is_mmap_used = true;
+        Some(unsafe { MmapMut::map_mut(&dst).expect("failed to mmap the file") })
+    } else {
+        None
+    }));
+
+    let walker = thread::spawn(move || {
+        for entry in glob(&input_path_str).unwrap() {
+            if let Ok(path) = entry {
+                let file_name = path.file_stem().unwrap().to_str().unwrap();
+                let offset = file_name.parse::<i128>().unwrap_or(-1);
+
+                if offset == -1 {
+                    continue;
+                }
+
+                let uoffset = u64::try_from(offset).unwrap();
+
+                sx_cloned
+                    .send((path, uoffset))
+                    .expect("could not synchronize threads");
             }
+        }
+    });
 
-            let uoffset = usize::try_from(offset).unwrap();
+    drop(sx);
 
+    let mmap_dst_cloned = Arc::clone(&mmap_dst);
+
+    let injector = thread::spawn(move || {
+        for (path, offset) in rx {
             let src = OpenOptions::new()
                 .read(true)
-                .open(path)
+                .open(&path)
                 .expect("failed to open the file");
 
-            let total_injected_bytes = injector::inject(&src, &mut mmap_dst, uoffset);
+            let mut total_injected_bytes: u64 = 0;
+            let mut mmap_injected = false;
+            let mut mmap_lock = mmap_dst_cloned.lock().expect("failed to acquire lock");
+
+            if let Some(ref mut mmap) = *mmap_lock {
+                if is_mmap_support(&src) {
+                    mmap_injected = true;
+                    total_injected_bytes =
+                        injector::inject_mmap(&src, mmap, offset as usize) as u64;
+                }
+            }
+
+            if !mmap_injected {
+                total_injected_bytes = injector::inject_io(&src, &dst, offset);
+            }
 
             if !args.silent {
                 println!("--> Injected {} bytes @ {}", total_injected_bytes, offset);
             }
         }
-    }
+    });
 
-    mmap_dst.flush().expect("failed to save file on disk");
+    walker.join().expect("walker thread panicked");
+    injector.join().expect("injector thread panicked");
+
+    if is_mmap_used {
+        let mut mmap_lock = mmap_dst.lock().expect("failed to acquire lock");
+
+        if let Some(mmap) = mmap_lock.as_mut() {
+            mmap.flush().expect("failed to save file on disk");
+        } else {
+            eprintln!("mmap is not available, but should be");
+        }
+    }
 }
 
 fn humanize_size(bytes: usize) -> String {

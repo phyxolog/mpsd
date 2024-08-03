@@ -65,6 +65,7 @@ pub enum Commands {
         output_dir: String,
     },
     /// Inject streams back to the input file from the given folder
+    /// (supports large files on 32-bit systems)
     #[command(arg_required_else_help = true)]
     Inject {
         /// Path to the input file
