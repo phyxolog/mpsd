@@ -282,6 +282,8 @@ fn run_injector(args: Args) {
     let mmap_dst_cloned = Arc::clone(&mmap_dst);
 
     let injector = thread::spawn(move || {
+        let mut mmap_lock = mmap_dst_cloned.lock().expect("failed to acquire lock");
+
         for (path, offset) in rx {
             let src = OpenOptions::new()
                 .read(true)
@@ -290,7 +292,6 @@ fn run_injector(args: Args) {
 
             let mut injected_bytes: u64 = 0;
             let mut mmap_injected = false;
-            let mut mmap_lock = mmap_dst_cloned.lock().expect("failed to acquire lock");
 
             if let Some(ref mut mmap) = *mmap_lock {
                 if is_mmap_support(&src) {
@@ -301,6 +302,15 @@ fn run_injector(args: Args) {
 
             if !mmap_injected {
                 injected_bytes = injector::inject_io(&src, &dst, offset);
+            }
+
+            let src_size = src.metadata().unwrap().len();
+
+            if injected_bytes != src_size {
+                eprintln!(
+                    "Injected bytes ({}) does not match the source file ({})",
+                    injected_bytes, src_size
+                );
             }
 
             if !args.silent {
