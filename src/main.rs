@@ -288,24 +288,23 @@ fn run_injector(args: Args) {
                 .open(&path)
                 .expect("failed to open the file");
 
-            let mut total_injected_bytes: u64 = 0;
+            let mut injected_bytes: u64 = 0;
             let mut mmap_injected = false;
             let mut mmap_lock = mmap_dst_cloned.lock().expect("failed to acquire lock");
 
             if let Some(ref mut mmap) = *mmap_lock {
                 if is_mmap_support(&src) {
                     mmap_injected = true;
-                    total_injected_bytes =
-                        injector::inject_mmap(&src, mmap, offset as usize) as u64;
+                    injected_bytes = injector::inject_mmap(&src, mmap, offset as usize) as u64;
                 }
             }
 
             if !mmap_injected {
-                total_injected_bytes = injector::inject_io(&src, &dst, offset);
+                injected_bytes = injector::inject_io(&src, &dst, offset);
             }
 
             if !args.silent {
-                println!("--> Injected {} bytes @ {}", total_injected_bytes, offset);
+                println!("--> Injected {} bytes @ {}", injected_bytes, offset);
             }
         }
     });
