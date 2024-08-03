@@ -96,7 +96,7 @@ fn run(args: Args) -> Summary {
     let file_path = args.file_path.expect("file path is not set");
 
     let file = OpenOptions::new()
-        .write(true)
+        .write(args.is_extract && args.erase_sectors)
         .read(true)
         .open(file_path)
         .expect("failed to open the file");
@@ -233,7 +233,12 @@ fn run(args: Args) -> Summary {
 fn run_injector(args: Args) {
     let file_path = args.file_path.expect("file path is not set");
     let input_dir = args.input_dir.expect("input dir is not set");
-    let input_path = input_dir.as_path();
+    let mut input_path = input_dir;
+    let input_path_str = input_path.to_str().expect("failed to get input path");
+
+    if !input_path_str.contains("*") {
+        input_path = input_path.join("*.*");
+    }
 
     let dst = OpenOptions::new()
         .write(true)
@@ -307,7 +312,7 @@ fn run_injector(args: Args) {
 
             if injected_bytes != src_size {
                 eprintln!(
-                    "Injected bytes ({}) does not match the source file ({})",
+                    "Injected bytes ({}) does not match the source file size ({})",
                     injected_bytes, src_size
                 );
             }
