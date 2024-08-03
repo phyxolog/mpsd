@@ -249,11 +249,13 @@ fn run_injector(args: Args) {
     let (sx, rx) = mpsc::channel();
     let sx_cloned = sx.clone();
 
-    let mmap_dst = Arc::new(Mutex::new(if is_mmap_support(&dst) {
-        Some(unsafe { MmapMut::map_mut(&dst).expect("failed to mmap the file") })
-    } else {
-        None
-    }));
+    let mut mmap_dst = Arc::new(Mutex::new(None));
+
+    if is_mmap_support(&dst) {
+        mmap_dst = Arc::new(Mutex::new(Some(unsafe {
+            MmapMut::map_mut(&dst).expect("failed to mmap the file")
+        })));
+    }
 
     let walker = thread::spawn(move || {
         for entry in glob(&input_path_str).unwrap() {
