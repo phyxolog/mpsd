@@ -6,7 +6,7 @@ Multi-Pattern Streams Detector is a file scanning and extraction command-line to
 
 ## Usage
 
-```sh
+```
 Multi-Pattern Streams Detector
 
 Usage: mpsd [OPTIONS] <COMMAND>
