@@ -249,10 +249,7 @@ fn run_injector(args: Args) {
     let (sx, rx) = mpsc::channel();
     let sx_cloned = sx.clone();
 
-    let mut is_mmap_used = false;
-
     let mmap_dst = Arc::new(Mutex::new(if is_mmap_support(&dst) {
-        is_mmap_used = true;
         Some(unsafe { MmapMut::map_mut(&dst).expect("failed to mmap the file") })
     } else {
         None
@@ -293,7 +290,7 @@ fn run_injector(args: Args) {
             let mut injected_bytes: u64 = 0;
             let mut mmap_injected = false;
 
-            if let Some(ref mut mmap) = *mmap_lock {
+            if let Some(ref mut mmap) = mmap_lock.as_mut() {
                 if is_mmap_support(&src) {
                     mmap_injected = true;
                     injected_bytes = injector::inject_mmap(&src, mmap, offset as usize) as u64;
@@ -322,14 +319,10 @@ fn run_injector(args: Args) {
     walker.join().expect("walker thread panicked");
     injector.join().expect("injector thread panicked");
 
-    if is_mmap_used {
-        let mut mmap_lock = mmap_dst.lock().expect("failed to acquire lock");
+    let mut mmap_lock = mmap_dst.lock().expect("failed to acquire lock");
 
-        if let Some(mmap) = mmap_lock.as_mut() {
-            mmap.flush().expect("failed to save file on disk");
-        } else {
-            eprintln!("mmap is not available, but should be");
-        }
+    if let Some(mmap) = mmap_lock.as_mut() {
+        mmap.flush().expect("failed to save file on disk");
     }
 }
 
