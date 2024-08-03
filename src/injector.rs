@@ -1,15 +1,12 @@
 use memmap2::{Mmap, MmapMut};
 use std::fs::File;
 
-pub fn inject(src: &File, dst: &mut MmapMut, offset: usize, size: usize) -> usize {
+pub fn inject(src: &File, dst: &mut MmapMut, offset: usize) -> usize {
     let mmap_src = unsafe { Mmap::map(src).expect("failed to mmap the file") };
 
     let mut bytes_written = 0;
     let mut buffer_size = 128 * 1024;
-
-    if offset + size > dst.len() {
-        return 0;
-    }
+    let size = src.metadata().unwrap().len() as usize;
 
     if size > mmap_src.len() {
         return 0;

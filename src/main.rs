@@ -231,7 +231,7 @@ fn run(args: Args) -> Summary {
 
 fn run_injector(args: Args) {
     let input_dir = args.input_dir.expect("input dir is not set");
-    let input_path = input_dir.as_path().join("*_*.*");
+    let input_path = input_dir.as_path();
 
     let file_path = args.file_path.expect("file path is not set");
 
@@ -248,37 +248,23 @@ fn run_injector(args: Args) {
     for entry in glob(&input_path_str).unwrap() {
         if let Ok(path) = entry {
             let file_name = path.file_stem().unwrap().to_str().unwrap();
-            let parts: Vec<&str> = file_name.split('_').collect();
+            let offset = file_name.parse::<i128>().unwrap_or(-1);
 
-            match parts.as_slice() {
-                [offset, size] => {
-                    let offset = offset.parse::<i128>().unwrap_or(-1);
-                    let size = size.parse::<i128>().unwrap_or(-1);
+            if offset == -1 {
+                continue;
+            }
 
-                    if offset == -1 || size == -1 {
-                        continue;
-                    }
+            let uoffset = usize::try_from(offset).unwrap();
 
-                    let src = OpenOptions::new()
-                        .read(true)
-                        .open(path)
-                        .expect("failed to open the file");
+            let src = OpenOptions::new()
+                .read(true)
+                .open(path)
+                .expect("failed to open the file");
 
-                    let total_injected_bytes =
-                        injector::inject(&src, &mut mmap_dst, offset as usize, size as usize);
+            let total_injected_bytes = injector::inject(&src, &mut mmap_dst, uoffset);
 
-                    if total_injected_bytes != size as usize {
-                        println!(
-                            "Total injected bytes ({}) does not match the stream size ({})",
-                            total_injected_bytes, size
-                        );
-                    }
-
-                    if !args.silent {
-                        println!("--> Injected {} bytes @ {}", size, offset);
-                    }
-                }
-                _ => {}
+            if !args.silent {
+                println!("--> Injected {} bytes @ {}", total_injected_bytes, offset);
             }
         }
     }

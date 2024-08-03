@@ -49,13 +49,13 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Scan input file
+    /// Scan the input file
     #[command(arg_required_else_help = true)]
     Scan {
         /// Path to the input file
         file_path: String,
     },
-    /// Extract streams from input file
+    /// Extract streams from the input file
     #[command(arg_required_else_help = true)]
     Extract {
         /// Path to the input file

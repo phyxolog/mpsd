@@ -9,7 +9,7 @@ pub fn extract(
     ext: &str,
     output_dir: &PathBuf,
 ) -> usize {
-    let file_name = format!("{}_{}.{}", offset, size, ext);
+    let file_name = format!("{}.{}", offset, ext);
     let output_path = output_dir.as_path().join(file_name);
 
     let file = OpenOptions::new()
