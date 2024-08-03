@@ -12,9 +12,9 @@ Multi-Pattern Streams Detector
 Usage: mpsd [OPTIONS] <COMMAND>
 
 Commands:
-  scan     Scan input file
-  extract  Extract streams from input file
-  inject   Inject streams back to the input file from the given folder
+  scan     Scan the input file
+  extract  Extract streams from the input file
+  inject   Inject streams back to the input file from the given folder (supports large files on 32-bit systems)
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -34,7 +34,7 @@ Options:
 
 ## Large file support
 
-Large files (> 4 GB) are supported only on 64-bit platforms because of using memory-mapped I/O, which require addressing more memory space than 32-bit systems can provide.
+Large files (> 4 GB) are supported only on 64-bit platforms (scan & extract modes) because of using memory-mapped I/O, which require addressing more memory space than 32-bit systems can provide. Injector automatically uses I/O if memory-map is not supported.
 
 ## Copyright and License
 
