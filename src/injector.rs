@@ -21,6 +21,10 @@ pub fn inject_io(src: &File, dst: &File, offset: u64) -> u64 {
         return 0;
     }
 
+    writer
+        .seek(SeekFrom::Start(offset))
+        .expect("failed to change pos in file");
+
     while bytes_written < size {
         if bytes_written + buffer_size > size {
             buffer_size = size - bytes_written;
@@ -30,10 +34,6 @@ pub fn inject_io(src: &File, dst: &File, offset: u64) -> u64 {
         reader
             .read_exact(&mut buffer)
             .expect("failed to read from file");
-
-        writer
-            .seek(SeekFrom::Start(offset + bytes_written))
-            .expect("failed to change pos in file");
 
         writer.write_all(&buffer).expect("failed to write to file");
 
