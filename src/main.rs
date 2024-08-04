@@ -6,7 +6,7 @@ use injector::is_mmap_support;
 use memmap2::{Mmap, MmapMut};
 use range_set_blaze::RangeSetBlaze;
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions};
+use std::fs::{create_dir_all, remove_file, OpenOptions};
 use std::iter::Iterator;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
@@ -27,6 +27,7 @@ mod injector;
 struct Args {
     silent: bool,
     is_extract: bool,
+    injected_rm: bool,
     erase_sectors: bool,
     file_path: Option<PathBuf>,
     input_dir: Option<PathBuf>,
@@ -112,7 +113,7 @@ fn run(args: Args) -> Summary {
     let output_dir_cloned = output_dir.clone();
 
     if args.is_extract {
-        fs::create_dir_all(output_dir).expect("could not create directory for extracting files");
+        create_dir_all(output_dir).expect("could not create directory for extracting files");
     }
 
     let start_time = Instant::now();
@@ -315,6 +316,8 @@ fn run_injector(args: Args) {
                     "Injected bytes ({}) does not match the source file size ({})",
                     injected_bytes, src_size
                 );
+            } else if args.injected_rm {
+                remove_file(path).expect("failed to remove a file");
             }
 
             if !args.silent {
@@ -405,6 +408,7 @@ fn main() {
         patterns,
         detect_options,
         silent: cli_args.silent,
+        injected_rm: cli_args.injected_rm,
         erase_sectors: cli_args.erase_sectors,
         input_dir: None,
         output_dir: None,

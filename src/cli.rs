@@ -39,6 +39,11 @@ pub struct Cli {
     #[arg(long = "erase-sectors", global = true, value_parser = value_parser!(bool), default_value_t = false, verbatim_doc_comment)]
     pub erase_sectors: bool,
 
+    /// Remove files after injection (only when injection was succeed)
+    /// It won't delete a directory where files were located
+    #[arg(long = "rm", global = true, value_parser = value_parser!(bool), default_value_t = false, verbatim_doc_comment)]
+    pub injected_rm: bool,
+
     /// Do not print a log for each found/injected stream
     #[arg(short = 's', long = "silent", global = true, value_parser = value_parser!(bool), default_value_t = false)]
     pub silent: bool,
