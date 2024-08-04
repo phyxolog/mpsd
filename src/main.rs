@@ -269,7 +269,7 @@ fn run_injector(args: Args) {
                 let file_name = path.file_stem().unwrap().to_str().unwrap();
                 let offset = file_name.parse::<i128>().unwrap_or(-1);
 
-                if offset == -1 {
+                if offset < 0 {
                     continue;
                 }
 
