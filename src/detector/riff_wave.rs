@@ -2,7 +2,7 @@ use super::{DetectOptions, Detector, RiffWaveDetector, StreamMatch};
 use std::mem::size_of;
 
 #[repr(C, packed)]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct RiffHeader {
     id: [u8; 4],
     chunk_size: u32,
@@ -10,14 +10,14 @@ struct RiffHeader {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct WaveChunk {
     id: [u8; 4],
     size: u32,
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct WaveFormat {
     format_tag: u16,
     channels: u16,
@@ -27,14 +27,14 @@ struct WaveFormat {
 }
 
 #[repr(C, packed)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct WaveFormatPCM {
     format: WaveFormat,
     bits_per_sample: u16,
 }
 
 #[repr(C, packed)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct RiffWavePCMHeader {
     header: RiffHeader,
     chunk1: WaveChunk,
