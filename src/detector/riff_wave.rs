@@ -1,90 +1,111 @@
 use super::{DetectOptions, Detector, RiffWaveDetector, StreamMatch};
+use std::mem::size_of;
 
 #[repr(C, packed)]
 #[derive(Debug, Default)]
-struct RiffWaveHeader {
-    chunk_id: [u8; 4],
+struct RiffHeader {
+    id: [u8; 4],
     chunk_size: u32,
     format: [u8; 4],
-    subchunk1_id: [u8; 4],
-    subchunk1_size: u32,
-    audio_format: u16,
-    num_channels: u16,
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Default)]
+struct WaveChunk {
+    id: [u8; 4],
+    size: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Default)]
+struct WaveFormat {
+    format_tag: u16,
+    channels: u16,
     sample_rate: u32,
     byte_rate: u32,
     block_align: u16,
+}
+
+#[repr(C, packed)]
+#[derive(Default)]
+struct WaveFormatPCM {
+    format: WaveFormat,
     bits_per_sample: u16,
-    subchunk2_id: [u8; 4],
-    subchunk2_size: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Default)]
+struct RiffWavePCMHeader {
+    header: RiffHeader,
+    chunk1: WaveChunk,
+    pcm_format: WaveFormatPCM,
+    chunk2: WaveChunk,
 }
 
 impl Detector for RiffWaveDetector {
     fn detect(&self, buffer: &[u8], offset: usize, _opts: &DetectOptions) -> Option<StreamMatch> {
-        if offset + std::mem::size_of::<RiffWaveHeader>() > buffer.len() {
+        if offset + size_of::<RiffWavePCMHeader>() > buffer.len() {
             return None;
         }
 
         let (head, body, _tail) = unsafe {
-            &buffer[offset..offset + std::mem::size_of::<RiffWaveHeader>()]
-                .align_to::<RiffWaveHeader>()
+            &buffer[offset..offset + size_of::<RiffWavePCMHeader>()].align_to::<RiffWavePCMHeader>()
         };
 
         if !head.is_empty() {
             return None;
         }
 
-        let header = &body[0];
+        let data = &body[0];
 
-        if &header.chunk_id != b"RIFF" {
+        if &data.header.id != b"RIFF" {
             return None;
         }
 
-        if &header.format != b"WAVE" {
+        if &data.header.format != b"WAVE" {
             return None;
         }
 
-        if &header.subchunk1_id != b"fmt " {
+        if &data.chunk1.id != b"fmt " {
             return None;
         }
 
-        if &header.subchunk2_id != b"data" {
+        if &data.chunk2.id != b"data" {
             return None;
         }
 
-        if header.audio_format != 1 {
+        if data.pcm_format.format.format_tag != 1 {
             return None;
         }
 
-        if header.subchunk1_size != 16 {
+        if data.chunk1.size != 16 {
             return None;
         }
 
-        if header.byte_rate
-            != header.sample_rate * header.num_channels as u32 * header.bits_per_sample as u32 / 8
+        if data.pcm_format.format.byte_rate
+            != data.pcm_format.format.sample_rate
+                * data.pcm_format.format.channels as u32
+                * data.pcm_format.bits_per_sample as u32
+                / 8
         {
             return None;
         }
 
-        if header.block_align != header.num_channels * header.bits_per_sample / 8 {
+        if data.pcm_format.format.block_align
+            != data.pcm_format.format.channels * data.pcm_format.bits_per_sample / 8
+        {
             return None;
         }
 
-        let mut data_size =
-            usize::try_from(header.subchunk2_size).unwrap() + std::mem::size_of::<RiffWaveHeader>();
+        let mut data_size = usize::try_from(data.chunk2.size).unwrap();
+        let chunk_size = usize::try_from(data.header.chunk_size).unwrap();
 
-        let chunk_size = usize::try_from(header.chunk_size).unwrap() + 8;
-
-        let min = chunk_size.min(data_size) as f64;
-        let max = chunk_size.max(data_size) as f64;
-
-        // if the difference between the chunk size and the data size is 5% or more,
-        // we consider this to be an incorrect header
-        if ((max - min) / max) * 100.0 >= 5.0 {
+        if chunk_size < data_size {
             return None;
         }
 
-        // data_size is more directly relevant because it indicates the amount
-        // of actual audio data
+        data_size += size_of::<RiffWavePCMHeader>();
+
         if offset + data_size > buffer.len() {
             data_size = buffer.len() - offset;
         }
