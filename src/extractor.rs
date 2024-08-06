@@ -35,7 +35,6 @@ pub fn extract(
         let dst = &mut mmap[bytes_written..bytes_written + buffer_size];
 
         dst.copy_from_slice(&buffer[start..end]);
-
         bytes_written += buffer_size;
     }
 

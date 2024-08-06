@@ -36,7 +36,6 @@ pub fn inject_io(src: &File, dst: &File, offset: u64) -> std::io::Result<u64> {
 
         reader.read_exact(&mut buffer)?;
         writer.write_all(&buffer)?;
-
         bytes_written += buffer_size;
     }
 
