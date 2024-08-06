@@ -201,7 +201,8 @@ fn run(args: Args) -> Summary {
 
     let extractor = thread::spawn(move || {
         for (offset, size, ext) in erx {
-            extractor::extract(&mmap_cloned, offset, size, &ext, &output_dir_cloned);
+            extractor::extract(&mmap_cloned, offset, size, &ext, &output_dir_cloned)
+                .expect("failed to extract the stream");
         }
     });
 
@@ -213,7 +214,8 @@ fn run(args: Args) -> Summary {
     let state = state.lock().expect("could not lock the state");
 
     if args.is_extract && args.erase_sectors {
-        let total_erased_bytes = eraser::erase_sectors(&file, &state.processed_sectors);
+        let total_erased_bytes = eraser::erase_sectors(&file, &state.processed_sectors)
+            .expect("failed to erase sectors");
 
         if total_erased_bytes != state.total_streams_size {
             eprintln!(
@@ -257,7 +259,7 @@ fn run_injector(args: Args) {
 
     let mut mmap_dst = Arc::new(Mutex::new(None));
 
-    if is_mmap_support(&dst) {
+    if let Ok(true) = is_mmap_support(&dst) {
         mmap_dst = Arc::new(Mutex::new(Some(unsafe {
             MmapMut::map_mut(&dst).expect("failed to mmap the file")
         })));
@@ -299,14 +301,17 @@ fn run_injector(args: Args) {
             let mut mmap_injected = false;
 
             if let Some(ref mut mmap) = mmap_lock.as_mut() {
-                if is_mmap_support(&src) {
+                if let Ok(true) = is_mmap_support(&src) {
                     mmap_injected = true;
-                    injected_bytes = injector::inject_mmap(&src, mmap, offset as usize) as u64;
+                    injected_bytes = injector::inject_mmap(&src, mmap, offset as usize)
+                        .expect("failed to inject the stream (mmap)")
+                        as u64;
                 }
             }
 
             if !mmap_injected {
-                injected_bytes = injector::inject_io(&src, &dst, offset);
+                injected_bytes = injector::inject_io(&src, &dst, offset)
+                    .expect("failed to inject the stream (io)");
             }
 
             let src_size = src.metadata().unwrap().len();

@@ -8,7 +8,7 @@ pub fn extract(
     size: usize,
     ext: &str,
     output_dir: &PathBuf,
-) -> usize {
+) -> Result<usize, std::io::Error> {
     let file_name = format!("{}.{}", offset, ext);
     let output_path = output_dir.as_path().join(file_name);
 
@@ -16,13 +16,10 @@ pub fn extract(
         .read(true)
         .write(true)
         .create(true)
-        .open(&output_path)
-        .expect("failed to create a file");
+        .open(&output_path)?;
 
-    file.set_len(size as u64)
-        .expect("failed to set len for the file");
-
-    let mut mmap = unsafe { MmapMut::map_mut(&file).expect("failed to mmap the file") };
+    file.set_len(size as u64)?;
+    let mut mmap = unsafe { MmapMut::map_mut(&file)? };
 
     let mut bytes_written = 0;
     let mut buffer_size = 128 * 1024;
@@ -41,7 +38,7 @@ pub fn extract(
         bytes_written += buffer_size;
     }
 
-    mmap.flush().expect("failed to save file on disk");
+    mmap.flush()?;
 
-    return bytes_written;
+    return Ok(bytes_written);
 }
