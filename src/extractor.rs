@@ -8,7 +8,7 @@ pub fn extract(
     size: usize,
     ext: &str,
     output_dir: &PathBuf,
-) -> Result<usize, std::io::Error> {
+) -> std::io::Result<usize> {
     let file_name = format!("{}.{}", offset, ext);
     let output_path = output_dir.as_path().join(file_name);
 
@@ -19,6 +19,7 @@ pub fn extract(
         .open(&output_path)?;
 
     file.set_len(size as u64)?;
+
     let mut mmap = unsafe { MmapMut::map_mut(&file)? };
 
     let mut bytes_written = 0;

@@ -2,12 +2,12 @@ use memmap2::{Mmap, MmapMut};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
-pub fn is_mmap_support(file: &File) -> Result<bool, std::io::Error> {
+pub fn is_mmap_support(file: &File) -> std::io::Result<bool> {
     let size = file.metadata()?.len();
     return Ok(!(std::mem::size_of::<usize>() < 8 && size > isize::MAX as u64));
 }
 
-pub fn inject_io(src: &File, dst: &File, offset: u64) -> Result<u64, std::io::Error> {
+pub fn inject_io(src: &File, dst: &File, offset: u64) -> std::io::Result<u64> {
     let mut reader = BufReader::new(src);
     let mut writer = BufWriter::new(dst);
 
@@ -43,7 +43,7 @@ pub fn inject_io(src: &File, dst: &File, offset: u64) -> Result<u64, std::io::Er
     return Ok(bytes_written);
 }
 
-pub fn inject_mmap(src: &File, dst: &mut MmapMut, offset: usize) -> Result<usize, std::io::Error> {
+pub fn inject_mmap(src: &File, dst: &mut MmapMut, offset: usize) -> std::io::Result<usize> {
     let mmap_src = unsafe { Mmap::map(src)? };
 
     let mut bytes_written = 0;

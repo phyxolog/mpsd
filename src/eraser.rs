@@ -2,7 +2,7 @@ use memmap2::MmapMut;
 use range_set_blaze::RangeSetBlaze;
 use std::fs::File;
 
-pub fn erase_sectors(file: &File, sectors: &RangeSetBlaze<usize>) -> Result<usize, std::io::Error> {
+pub fn erase_sectors(file: &File, sectors: &RangeSetBlaze<usize>) -> std::io::Result<usize> {
     let mut mmap = unsafe { MmapMut::map_mut(file)? };
 
     let mut total_bytes_written = 0;
