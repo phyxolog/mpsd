@@ -1,5 +1,5 @@
 use aho_corasick::AhoCorasick;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use colored::Colorize;
 use glob::glob;
 use injector::is_mmap_support;
@@ -145,21 +145,18 @@ fn run(args: Args) -> Summary {
         }
     });
 
-    let byte1_ac = AhoCorasick::new(&byte1_patterns).expect("could not initiate AhoCorasick");
     let byte1_ssx_cloned = ssx.clone();
     let byte1_mmap_cloned = Arc::clone(&mmap);
     let patterns_cloned = args.patterns.clone();
 
     let byte1_scanner = thread::spawn(move || {
-        if byte1_ac.patterns_len() > 0 {
-            for c in byte1_ac.find_iter(&*byte1_mmap_cloned) {
-                let pattern = &byte1_patterns[c.pattern()];
+        for pattern in byte1_patterns {
+            let it = memchr::memchr_iter(pattern.clone().get_u8(), &byte1_mmap_cloned);
 
-                if let Some(stream_types) = patterns_cloned.get(pattern) {
-                    byte1_ssx_cloned
-                        .send((c.start(), stream_types.clone()))
-                        .expect("could not synchronize threads");
-                }
+            for c in it {
+                byte1_ssx_cloned
+                    .send((c, patterns_cloned.get(&pattern).unwrap().clone()))
+                    .expect("could not synchronize threads");
             }
         }
     });
